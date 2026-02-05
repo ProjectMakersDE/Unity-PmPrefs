@@ -3,36 +3,70 @@ using UnityEngine.UIElements;
 
 namespace PM.Plugins
 {
+   /// <summary>
+   /// UI controller for a single preference item in the list view.
+   /// Handles data binding and visual feedback for changes.
+   /// </summary>
    public class PmPrefsListItemEntryController
    {
       private Label _keyLabel;
-      private TextField _valueLabel;
+      private TextField _valueField;
       private Toggle _deleteToggle;
       private bool _isChanged;
 
       private PmPrefsListItem _data;
       private VisualElement _root;
 
+      // Style colors
+      private static readonly Color ChangedBorderColor = new Color(0.35f, 0.61f, 0.3f);
+      private static readonly Color DeleteBorderColor = new Color(0.6f, 0.27f, 0.27f);
+      private static readonly Color TransparentColor = new Color(0, 0, 0, 0);
+
+      /// <summary>
+      /// Sets up the visual element references for this controller.
+      /// </summary>
+      /// <param name="visualElement">The root visual element for this list item.</param>
       public void SetVisualElement(VisualElement visualElement)
       {
          _root = visualElement;
          _keyLabel = visualElement.Q<Label>("Item_name");
-         _valueLabel = visualElement.Q<TextField>("Item_value");
+         _valueField = visualElement.Q<TextField>("Item_value");
          _deleteToggle = visualElement.Q<Toggle>("Item_delete");
       }
 
-      public string GetValue() => _valueLabel.value;
+      /// <summary>
+      /// Gets the current value from the text field.
+      /// </summary>
+      public string GetValue() => _valueField.value;
 
+      /// <summary>
+      /// Gets the current delete state.
+      /// </summary>
       public bool GetDelete() => _deleteToggle.value;
 
+      /// <summary>
+      /// Gets the key name.
+      /// </summary>
       public string GetKey() => _keyLabel.text;
+
+      /// <summary>
+      /// Returns true if the value has been changed in the UI.
+      /// </summary>
       public bool GetChanged() => _isChanged;
 
-      public void SetVisibility(bool b)
+      /// <summary>
+      /// Sets the visibility of this list item.
+      /// </summary>
+      /// <param name="visible">True to show, false to hide.</param>
+      public void SetVisibility(bool visible)
       {
-         _root.style.display = b ? DisplayStyle.Flex : DisplayStyle.None;
+         _root.style.display = visible ? DisplayStyle.Flex : DisplayStyle.None;
       }
 
+      /// <summary>
+      /// Binds data to this list item controller.
+      /// </summary>
+      /// <param name="data">The preference data to display.</param>
       public void SetData(PmPrefsListItem data)
       {
          _data = data;
@@ -41,13 +75,36 @@ namespace PM.Plugins
 
       private void Initialize()
       {
+         // Reset state
+         _isChanged = false;
+
+         // Unregister old callbacks to prevent duplicates
+         _valueField.UnregisterValueChangedCallback(OnValueChanged);
+         _deleteToggle.UnregisterValueChangedCallback(OnDeleteChanged);
+
+         // Set initial values
          _keyLabel.text = _data.Key;
-         _valueLabel.SetValueWithoutNotify(_data.Value);
+         _valueField.SetValueWithoutNotify(_data.Value);
          _deleteToggle.SetValueWithoutNotify(_data.DeleteMarker);
-         
-         _root.style.height = _valueLabel.resolvedStyle.height + 10;
-         _root.MarkDirtyRepaint();
-         _valueLabel.RegisterValueChangedCallback(OnValueChanged);
+
+         // Reset visual state
+         ClearBorderStyle();
+
+         // Apply existing state visuals
+         if (_data.DeleteMarker)
+         {
+            ApplyBorderStyle(DeleteBorderColor);
+         }
+         else if (_data.Changed)
+         {
+            ApplyBorderStyle(ChangedBorderColor);
+         }
+
+         // Update height based on content
+         UpdateHeight();
+
+         // Register callbacks
+         _valueField.RegisterValueChangedCallback(OnValueChanged);
          _deleteToggle.RegisterValueChangedCallback(OnDeleteChanged);
       }
 
@@ -57,26 +114,15 @@ namespace PM.Plugins
 
          if (_data.DeleteMarker)
          {
-            _valueLabel.style.borderBottomWidth = 2;
-            _valueLabel.style.borderLeftWidth = 2;
-            _valueLabel.style.borderRightWidth = 2;
-            _valueLabel.style.borderTopWidth = 2;
-            _valueLabel.style.borderBottomColor = new Color(0.6f, 0.27f, 0.27f);
-            _valueLabel.style.borderLeftColor = new Color(0.6f, 0.27f, 0.27f);
-            _valueLabel.style.borderRightColor = new Color(0.6f, 0.27f, 0.27f);
-            _valueLabel.style.borderTopColor = new Color(0.6f, 0.27f, 0.27f);
+            ApplyBorderStyle(DeleteBorderColor);
+         }
+         else if (_data.Changed)
+         {
+            ApplyBorderStyle(ChangedBorderColor);
          }
          else
          {
-            _valueLabel.style.borderBottomWidth = 0;
-            _valueLabel.style.borderLeftWidth = 0;
-            _valueLabel.style.borderRightWidth = 0;
-            _valueLabel.style.borderTopWidth = 0;
-
-            _valueLabel.style.borderBottomColor = new StyleColor(new Color32(0, 0, 0, 0));
-            _valueLabel.style.borderLeftColor = new StyleColor(new Color32(0, 0, 0, 0));
-            _valueLabel.style.borderRightColor = new StyleColor(new Color32(0, 0, 0, 0));
-            _valueLabel.style.borderTopColor = new StyleColor(new Color32(0, 0, 0, 0));
+            ClearBorderStyle();
          }
       }
 
@@ -85,16 +131,45 @@ namespace PM.Plugins
          _data.Value = evt.newValue;
          _isChanged = true;
 
-         _root.style.height = _valueLabel.resolvedStyle.height + 10;
+         UpdateHeight();
+
+         if (!_data.DeleteMarker)
+         {
+            ApplyBorderStyle(ChangedBorderColor);
+         }
+      }
+
+      private void UpdateHeight()
+      {
+         if (_valueField.resolvedStyle.height > 0)
+         {
+            _root.style.height = _valueField.resolvedStyle.height + 10;
+         }
          _root.MarkDirtyRepaint();
-         _valueLabel.style.borderBottomWidth = 2;
-         _valueLabel.style.borderLeftWidth = 2;
-         _valueLabel.style.borderRightWidth = 2;
-         _valueLabel.style.borderTopWidth = 2;
-         _valueLabel.style.borderBottomColor = new Color(0.35f, 0.61f, 0.3f);
-         _valueLabel.style.borderLeftColor = new Color(0.35f, 0.61f, 0.3f);
-         _valueLabel.style.borderRightColor = new Color(0.35f, 0.61f, 0.3f);
-         _valueLabel.style.borderTopColor = new Color(0.35f, 0.61f, 0.3f);
+      }
+
+      private void ApplyBorderStyle(Color color)
+      {
+         _valueField.style.borderBottomWidth = 2;
+         _valueField.style.borderLeftWidth = 2;
+         _valueField.style.borderRightWidth = 2;
+         _valueField.style.borderTopWidth = 2;
+         _valueField.style.borderBottomColor = color;
+         _valueField.style.borderLeftColor = color;
+         _valueField.style.borderRightColor = color;
+         _valueField.style.borderTopColor = color;
+      }
+
+      private void ClearBorderStyle()
+      {
+         _valueField.style.borderBottomWidth = 0;
+         _valueField.style.borderLeftWidth = 0;
+         _valueField.style.borderRightWidth = 0;
+         _valueField.style.borderTopWidth = 0;
+         _valueField.style.borderBottomColor = TransparentColor;
+         _valueField.style.borderLeftColor = TransparentColor;
+         _valueField.style.borderRightColor = TransparentColor;
+         _valueField.style.borderTopColor = TransparentColor;
       }
    }
 }

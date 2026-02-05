@@ -1,14 +1,18 @@
 {
   "name": "com.projectmakers.pmprefs",
-  "version": "2.1.0",
-  "displayName": "PM_Prefs",
-  "description": "Save and load with PmPrefs as easy as never before.\nAnyone who has ever had to save in Unity knows how complex that can be.\nThere are different methods here, one of which stands out very clearly.",
+  "version": "2.2.0",
+  "displayName": "PmPrefs",
+  "description": "Simple and secure PlayerPrefs wrapper with AES encryption. Save any serializable object with one line of code. Includes visual Editor for managing preferences.",
   "unity": "2018.1",
   "unityRelease": "0b5",
   "keywords": [
     "ProjectMakers",
     "PmPrefs",
-	"pmprefs"
+    "pmprefs",
+    "PlayerPrefs",
+    "encryption",
+    "save",
+    "storage"
   ],
   "author": {
     "name": "ProjectMakers",

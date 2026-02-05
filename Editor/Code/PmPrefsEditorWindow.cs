@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEditor.UIElements;
@@ -9,12 +10,15 @@ using UnityEngine.UIElements;
 
 namespace PM.Plugins
 {
+   /// <summary>
+   /// Editor window for managing PmPrefs and PlayerPrefs.
+   /// Provides UI for viewing, editing, creating, and deleting preferences.
+   /// </summary>
    public class PmPrefsEditorWindow : EditorWindow
    {
       private VisualElement _root;
 
       private VisualTreeAsset _visualTreePmPrefsListItem;
-      private VisualTreeAsset _visualTreePlayerPrefsListItem;
 
       private ListView _listViewPmPrefsList;
       private ListView _listViewPlayerPrefsList;
@@ -44,29 +48,36 @@ namespace PM.Plugins
 
       private ToolbarSearchField _searchField;
 
-      private bool _showItAsPlainText;
-      private bool _listSort;
-
       private bool _showCreateNew;
       private bool _showConfig;
 
+      /// <summary>
+      /// When true, shows decrypted values. When false, shows encrypted values.
+      /// </summary>
       public bool ShowEncrypted;
 
-      public const string Prefix = "PmPrefs__";
-
+      /// <summary>
+      /// List of PlayerPrefs entries (non-PmPrefs).
+      /// </summary>
       public List<PmPrefsListItem> PlayerPrefsList;
+
+      /// <summary>
+      /// List of PmPrefs entries.
+      /// </summary>
       public List<PmPrefsListItem> PmPrefsList;
-      private readonly GetWindowsKeys _getWindowsKeys;
+
+      private readonly PrefsKeyReader _prefsKeyReader;
 
       public PmPrefsEditorWindow()
       {
-         _getWindowsKeys = new GetWindowsKeys(this);
+         _prefsKeyReader = new PrefsKeyReader(this);
       }
 
-      private GetWindowsKeys GetWindowsKeys => _getWindowsKeys;
-
+      /// <summary>
+      /// Opens the PmPrefs editor window.
+      /// </summary>
       [MenuItem("Tools/ProjectMakers/PmPrefs")]
-      public static void ShowExample()
+      public static void ShowWindow()
       {
          PmPrefsEditorWindow wnd = GetWindow<PmPrefsEditorWindow>();
          wnd.titleContent = new GUIContent("PmPrefs");
@@ -78,13 +89,27 @@ namespace PM.Plugins
          rootVisualElement.Clear();
          _root = rootVisualElement;
 
-         var visualTree = (VisualTreeAsset)AssetDatabase.LoadAssetAtPath("Packages/com.projectmakers.pmprefs/Editor/Style/PmPrefs.uxml", typeof(VisualTreeAsset));
+         var visualTree = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(
+            "Packages/com.projectmakers.pmprefs/Editor/Style/PmPrefs.uxml");
+
+         if (visualTree == null)
+         {
+            // Fallback: Search in Assets folder (for development)
+            visualTree = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(
+               "Assets/PmPrefs/Editor/Style/PmPrefs.uxml");
+         }
+
+         if (visualTree == null)
+         {
+            Debug.LogError("[PmPrefs] Could not load PmPrefs.uxml. Please ensure the package is installed correctly.");
+            return;
+         }
 
          var labelFromUxml = visualTree.Instantiate();
          _root.Add(labelFromUxml);
 
          InitializeVisualElements();
-         GetKeys();
+         RefreshLists();
 
          _root.MarkDirtyRepaint();
          Repaint();
@@ -97,7 +122,14 @@ namespace PM.Plugins
 
       private void InitializeVisualElements()
       {
-         _visualTreePmPrefsListItem = (VisualTreeAsset)AssetDatabase.LoadAssetAtPath("Packages/com.projectmakers.pmprefs/Editor/Style/PmPrefsListItem.uxml", typeof(VisualTreeAsset));
+         _visualTreePmPrefsListItem = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(
+            "Packages/com.projectmakers.pmprefs/Editor/Style/PmPrefsListItem.uxml");
+
+         if (_visualTreePmPrefsListItem == null)
+         {
+            _visualTreePmPrefsListItem = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(
+               "Assets/PmPrefs/Editor/Style/PmPrefsListItem.uxml");
+         }
 
          _listViewPmPrefsList = _root.Q<ListView>("PmPrefsList");
          _listViewPlayerPrefsList = _root.Q<ListView>("PlayerPrefsList");
@@ -127,158 +159,217 @@ namespace PM.Plugins
 
          _searchField = _root.Q<ToolbarSearchField>("search_field");
 
+         // Wire up event handlers
          _saveButton.clicked += SaveAll;
-
-         _deleteAllButton.clicked += OnDeleteAllButtonOnClicked;
-
-         _exportButton.clicked += () =>
-         {
-            var path = EditorUtility.SaveFilePanel("Export Folder", Application.absoluteURL, DateTime.Now.ToShortDateString() + "_PmPrefs_Export", "csv");
-
-            if (path.Length != 0)
-               Export(path);
-         };
-
-         _importButton.clicked += () =>
-         {
-            var path = EditorUtility.OpenFilePanel("Import Folder", Application.absoluteURL, "csv");
-
-            if (path.Length != 0)
-               Import(path);
-         };
-
-         _createNewButton.clicked += OnCreateNewButtonOnClicked;
-         _createButton.clicked += Create;
-
+         _deleteAllButton.clicked += OnDeleteAllButtonClicked;
+         _exportButton.clicked += OnExportButtonClicked;
+         _importButton.clicked += OnImportButtonClicked;
+         _createNewButton.clicked += OnCreateNewButtonClicked;
+         _createButton.clicked += CreateNewPref;
          _changeSecureKeyButton.clicked += ChangeSecureKey;
+         _configurationButton.clicked += OnConfigurationButtonClicked;
+         _refreshButton.clicked += OnRefreshButtonClicked;
+         _showEncryptedButton.clicked += OnShowEncryptedButtonClicked;
+         _showPmPrefsButton.clicked += OnShowPmPrefsButtonClicked;
+         _showPlayerPrefsButton.clicked += OnShowPlayerPrefsButtonClicked;
 
-         _configurationButton.clicked += OnConfigurationButtonOnClicked;
-         _refreshButton.clicked += GetKeys;
-
-         _showEncryptedButton.clicked += () =>
-         {
-            ShowEncrypted = !ShowEncrypted;
-            _showEncryptedButton.style.backgroundColor = ShowEncrypted ? new StyleColor(new Color(.15f, .15f, .15f)) : new StyleColor(new Color(.235f, .235f, .235f));
-            Initialize();
-         };
-
-         _showPmPrefsButton.clicked += OnShowPmPrefsButtonOnClicked;
-         _showPlayerPrefsButton.clicked += OnShowPlayerPrefsButtonOnClicked;
+         // Add tooltips for better usability
+         if (_saveButton != null) _saveButton.tooltip = "Save all changes to preferences";
+         if (_deleteAllButton != null) _deleteAllButton.tooltip = "Delete all preferences (PmPrefs and PlayerPrefs)";
+         if (_createNewButton != null) _createNewButton.tooltip = "Show/hide the create new preference panel";
+         if (_configurationButton != null) _configurationButton.tooltip = "Show/hide configuration options";
+         if (_refreshButton != null) _refreshButton.tooltip = "Refresh the preference lists";
+         if (_showEncryptedButton != null) _showEncryptedButton.tooltip = "Toggle between encrypted and decrypted view";
+         if (_exportButton != null) _exportButton.tooltip = "Export preferences to CSV file";
+         if (_importButton != null) _importButton.tooltip = "Import preferences from CSV file";
       }
 
-      private void OnDeleteAllButtonOnClicked()
+      private void OnDeleteAllButtonClicked()
       {
-         if (EditorUtility.DisplayDialog("Delete All Keys", "Are you sure you want to delete all PmPrefs and PlayerPrefs?", "Yes", "No"))
+         if (EditorUtility.DisplayDialog("Delete All Keys",
+            "Are you sure you want to delete all PmPrefs and PlayerPrefs?\n\nThis action cannot be undone!",
+            "Yes, Delete All", "Cancel"))
          {
             PmPrefs.DeleteAll();
-            PmPrefs.SaveAll();
+            PlayerPrefs.Save();
 
-            PmPrefsList.Clear();
-            PlayerPrefsList.Clear();
+            _prefsKeyReader.InvalidateCache();
+            RefreshLists();
 
-            _listViewPmPrefsList.Clear();
-            _listViewPlayerPrefsList.Clear();
-
-            Initialize();
+            EditorUtility.DisplayDialog("Deleted", "All preferences have been deleted.", "OK");
          }
+      }
+
+      private void OnExportButtonClicked()
+      {
+         string defaultName = $"{DateTime.Now:yyyy-MM-dd}_PmPrefs_Export";
+         var path = EditorUtility.SaveFilePanel("Export Preferences", "", defaultName, "csv");
+
+         if (string.IsNullOrEmpty(path)) return;
+
+         try
+         {
+            Export(path);
+            EditorUtility.DisplayDialog("Export Complete", $"Preferences exported to:\n{path}", "OK");
+         }
+         catch (Exception ex)
+         {
+            EditorUtility.DisplayDialog("Export Failed", $"Failed to export preferences:\n{ex.Message}", "OK");
+         }
+      }
+
+      private void OnImportButtonClicked()
+      {
+         var path = EditorUtility.OpenFilePanel("Import Preferences", "", "csv");
+
+         if (string.IsNullOrEmpty(path)) return;
+
+         if (!EditorUtility.DisplayDialog("Import Preferences",
+            "This will replace all existing PmPrefs with the imported data.\n\nRegular PlayerPrefs will NOT be affected.\n\nContinue?",
+            "Import", "Cancel"))
+         {
+            return;
+         }
+
+         try
+         {
+            Import(path);
+            EditorUtility.DisplayDialog("Import Complete", "Preferences imported successfully.", "OK");
+         }
+         catch (Exception ex)
+         {
+            EditorUtility.DisplayDialog("Import Failed", $"Failed to import preferences:\n{ex.Message}", "OK");
+         }
+      }
+
+      private void OnRefreshButtonClicked()
+      {
+         _prefsKeyReader.InvalidateCache();
+         RefreshLists();
+      }
+
+      private void OnShowEncryptedButtonClicked()
+      {
+         ShowEncrypted = !ShowEncrypted;
+         _showEncryptedButton.style.backgroundColor = ShowEncrypted
+            ? new StyleColor(new Color(.15f, .15f, .15f))
+            : new StyleColor(new Color(.235f, .235f, .235f));
+
+         RefreshLists();
       }
 
       private void Export(string path)
       {
-         var csv = "";
+         var csv = new StringBuilder();
 
-         for (var i = PmPrefsList.Count - 1; i >= 0; i--)
+         foreach (var item in PmPrefsList)
          {
-            var value = ShowEncrypted ? PmPrefs.Decrypt(PmPrefsList[i].Value) : PmPrefsList[i].Value;
-            csv += "PmPrefs;" + PmPrefsList[i].Key + ";" + value + Environment.NewLine;
+            // When ShowEncrypted is true, the value is already decrypted in the list
+            // When ShowEncrypted is false, we need to decrypt for export (export should be readable)
+            string value = ShowEncrypted ? item.Value : PmPrefs.Decrypt(PlayerPrefs.GetString(PmPrefs.Prefix + item.Key));
+            csv.AppendLine($"PmPrefs;{item.Key};{value}");
          }
 
-         for (var i = PlayerPrefsList.Count - 1; i >= 0; i--)
+         foreach (var item in PlayerPrefsList)
          {
-            csv += "PlayerPrefs;" + PlayerPrefsList[i].Key + ";" + PlayerPrefsList[i].Value + Environment.NewLine;
+            csv.AppendLine($"PlayerPrefs;{item.Key};{item.Value}");
          }
 
-         File.WriteAllText(path, csv);
+         File.WriteAllText(path, csv.ToString(), Encoding.UTF8);
       }
 
       private void Import(string importPath)
       {
-         PmPrefs.DeleteAll();
-         PmPrefs.SaveAll();
+         // Only delete PmPrefs, not all PlayerPrefs
+         PmPrefs.DeleteAllPmPrefs();
+         PlayerPrefs.Save();
 
-         PmPrefsList.Clear();
-         PlayerPrefsList.Clear();
-
-         _listViewPmPrefsList.Clear();
-         _listViewPlayerPrefsList.Clear();
-
-         var reader = new StreamReader(File.OpenRead(importPath));
-
-         while (!reader.EndOfStream)
+         using (var reader = new StreamReader(File.OpenRead(importPath), Encoding.UTF8))
          {
-            var line = reader.ReadLine();
-            if (!string.IsNullOrWhiteSpace(line))
+            int lineNumber = 0;
+            while (!reader.EndOfStream)
             {
-               var sa = line.Split(';');
-               var type = sa[0];
-               var key = sa[1];
-               var value = sa[2];
+               lineNumber++;
+               var line = reader.ReadLine();
+               if (string.IsNullOrWhiteSpace(line)) continue;
+
+               var parts = line.Split(new[] { ';' }, 3);
+               if (parts.Length < 3)
+               {
+                  Debug.LogWarning($"[PmPrefs] Skipping invalid line {lineNumber}: {line}");
+                  continue;
+               }
+
+               var type = parts[0];
+               var key = parts[1];
+               var value = parts[2];
 
                if (type == "PmPrefs")
                {
-                  value = PmPrefs.Encrypt(value);
-                  key = Prefix + key;
+                  // Save through PmPrefs API (auto-encrypts)
+                  PmPrefs.Save(key, value);
                }
-
-               PlayerPrefs.SetString(key, value);
+               else if (type == "PlayerPrefs")
+               {
+                  // Try to detect type and save appropriately
+                  if (int.TryParse(value, out int intVal))
+                     PlayerPrefs.SetInt(key, intVal);
+                  else if (float.TryParse(value, out float floatVal))
+                     PlayerPrefs.SetFloat(key, floatVal);
+                  else
+                     PlayerPrefs.SetString(key, value);
+               }
             }
          }
 
-         Initialize();
+         PlayerPrefs.Save();
+         _prefsKeyReader.InvalidateCache();
+         RefreshLists();
       }
 
-      private void OnConfigurationButtonOnClicked()
+      private void OnConfigurationButtonClicked()
       {
-         if (!_showConfig)
+         _showConfig = !_showConfig;
+
+         if (_showConfig)
          {
             _configurationContainer.style.display = DisplayStyle.Flex;
             _configurationButton.style.backgroundColor = new StyleColor(new Color(.15f, .15f, .15f));
 
+            // Hide create panel
             _createNewContainer.style.display = DisplayStyle.None;
             _createNewButton.style.backgroundColor = new StyleColor(new Color(.235f, .235f, .235f));
-
-            _showConfig = true;
             _showCreateNew = false;
          }
          else
          {
             _configurationContainer.style.display = DisplayStyle.None;
             _configurationButton.style.backgroundColor = new StyleColor(new Color(.235f, .235f, .235f));
-            _showConfig = false;
          }
       }
 
-      private void OnCreateNewButtonOnClicked()
+      private void OnCreateNewButtonClicked()
       {
-         if (!_showCreateNew)
+         _showCreateNew = !_showCreateNew;
+
+         if (_showCreateNew)
          {
             _createNewContainer.style.display = DisplayStyle.Flex;
             _createNewButton.style.backgroundColor = new StyleColor(new Color(.15f, .15f, .15f));
 
+            // Hide config panel
             _configurationContainer.style.display = DisplayStyle.None;
             _configurationButton.style.backgroundColor = new StyleColor(new Color(.235f, .235f, .235f));
             _showConfig = false;
-            _showCreateNew = true;
          }
          else
          {
             _createNewContainer.style.display = DisplayStyle.None;
             _createNewButton.style.backgroundColor = new StyleColor(new Color(.235f, .235f, .235f));
-            _showCreateNew = false;
          }
       }
 
-      private void OnShowPlayerPrefsButtonOnClicked()
+      private void OnShowPlayerPrefsButtonClicked()
       {
          _listViewPmPrefsList.style.display = DisplayStyle.None;
          _showPlayerPrefsButton.style.backgroundColor = new StyleColor(new Color(.15f, .15f, .15f));
@@ -286,7 +377,7 @@ namespace PM.Plugins
          _showPmPrefsButton.style.backgroundColor = new StyleColor(new Color(.235f, .235f, .235f));
       }
 
-      private void OnShowPmPrefsButtonOnClicked()
+      private void OnShowPmPrefsButtonClicked()
       {
          _listViewPmPrefsList.style.display = DisplayStyle.Flex;
          _showPmPrefsButton.style.backgroundColor = new StyleColor(new Color(.15f, .15f, .15f));
@@ -294,27 +385,40 @@ namespace PM.Plugins
          _showPlayerPrefsButton.style.backgroundColor = new StyleColor(new Color(.235f, .235f, .235f));
       }
 
-      private void Create()
+      private void CreateNewPref()
       {
-         if (PmPrefsList.Exists(t => t.Key == _createNewKeyField.text)) return;
+         string key = _createNewKeyField.text;
+         string value = _createNewValueField.text;
 
-         var listValue = ShowEncrypted ? PmPrefs.Encrypt(_createNewValueField.text) : _createNewValueField.text;
+         if (string.IsNullOrWhiteSpace(key))
+         {
+            EditorUtility.DisplayDialog("Invalid Key", "Please enter a key name.", "OK");
+            return;
+         }
 
-         PmPrefsList.Add(new PmPrefsListItem(_createNewKeyField.text, listValue));
-         PmPrefs.Save(_createNewKeyField.text, _createNewValueField.text);
-         PmPrefs.SaveAll();
+         if (PmPrefsList.Exists(t => t.Key == key))
+         {
+            EditorUtility.DisplayDialog("Key Exists", $"A preference with key '{key}' already exists.", "OK");
+            return;
+         }
 
-         Initialize();
+         PmPrefs.Save(key, value);
+         PlayerPrefs.Save();
 
-         if (PmPrefsList.Count == 1)
-            EditorUtility.DisplayDialog("Warning", "Only one Element is Saved with PmPrefs.\nCurrently the list viewer in Unity still has a bug, so that a single entry is not displayed. ", "OK");
+         _createNewKeyField.value = "";
+         _createNewValueField.value = "";
+
+         _prefsKeyReader.InvalidateCache();
+         RefreshLists();
       }
 
-      private void FillList(ListView l, List<PmPrefsListItem> p)
+      private void FillList(ListView listView, List<PmPrefsListItem> items)
       {
-         l.Clear();
+         if (listView == null || _visualTreePmPrefsListItem == null) return;
 
-         l.makeItem = () =>
+         listView.Clear();
+
+         listView.makeItem = () =>
          {
             var newListEntry = _visualTreePmPrefsListItem.Instantiate();
             var newListEntryLogic = new PmPrefsListItemEntryController();
@@ -325,70 +429,104 @@ namespace PM.Plugins
             return newListEntry;
          };
 
-         l.bindItem = (item, index) => { ((PmPrefsListItemEntryController)item.userData).SetData(p[index]); };
+         listView.bindItem = (item, index) =>
+         {
+            if (index >= 0 && index < items.Count)
+            {
+               ((PmPrefsListItemEntryController)item.userData).SetData(items[index]);
+            }
+         };
 
-         l.itemsSource = p;
+         listView.itemsSource = items;
       }
 
       private void SaveAll()
       {
-         var pmPrefsList = PmPrefsList;
-         var playerPrefsList = PlayerPrefsList;
+         int savedCount = 0;
+         int deletedCount = 0;
 
-         for (var i = pmPrefsList.Count - 1; i >= 0; i--)
+         // Save PmPrefs changes
+         for (var i = PmPrefsList.Count - 1; i >= 0; i--)
          {
-            var pref = pmPrefsList[i];
+            var pref = PmPrefsList[i];
 
             if (pref.DeleteMarker)
             {
                PmPrefs.DeleteKey(pref.Key);
                PmPrefsList.RemoveAt(i);
+               deletedCount++;
                continue;
             }
 
             if (pref.Changed)
-               PmPrefs.Save(pref.Key, pref.Value);
+            {
+               // If showing decrypted, value needs to be encrypted on save
+               if (ShowEncrypted)
+               {
+                  PlayerPrefs.SetString(PmPrefs.Prefix + pref.Key, PmPrefs.Encrypt(pref.Value));
+               }
+               else
+               {
+                  // Already encrypted, save as-is
+                  PlayerPrefs.SetString(PmPrefs.Prefix + pref.Key, pref.Value);
+               }
+               pref.Save();
+               savedCount++;
+            }
          }
 
-         for (var i = playerPrefsList.Count - 1; i >= 0; i--)
+         // Save PlayerPrefs changes
+         for (var i = PlayerPrefsList.Count - 1; i >= 0; i--)
          {
-            var pref = playerPrefsList[i];
+            var pref = PlayerPrefsList[i];
 
             if (pref.DeleteMarker)
             {
                PlayerPrefs.DeleteKey(pref.Key);
                PlayerPrefsList.RemoveAt(i);
+               deletedCount++;
                continue;
             }
 
             if (pref.Changed)
             {
-               bool intParsed = int.TryParse(pref.Value, out var iParse);
-               bool floatParsed = float.TryParse(pref.Value, out var fParse);
-
-               if (intParsed)
-                  PlayerPrefs.SetInt(pref.Key, iParse);
-               else if (floatParsed)
-                  PlayerPrefs.SetFloat(pref.Key, fParse);
+               // Detect type
+               if (int.TryParse(pref.Value, out int intVal))
+                  PlayerPrefs.SetInt(pref.Key, intVal);
+               else if (float.TryParse(pref.Value, out float floatVal))
+                  PlayerPrefs.SetFloat(pref.Key, floatVal);
                else
                   PlayerPrefs.SetString(pref.Key, pref.Value);
+
+               pref.Save();
+               savedCount++;
             }
          }
 
-         Initialize();
+         PlayerPrefs.Save();
+         _prefsKeyReader.InvalidateCache();
+
+         // Refresh list views without full re-initialization
+         _listViewPmPrefsList?.RefreshItems();
+         _listViewPlayerPrefsList?.RefreshItems();
+
+         if (savedCount > 0 || deletedCount > 0)
+         {
+            Debug.Log($"[PmPrefs] Saved {savedCount} items, deleted {deletedCount} items.");
+         }
       }
 
-      private void GetKeys()
+      private void RefreshLists()
       {
          PmPrefsList = new List<PmPrefsListItem>();
          PlayerPrefsList = new List<PmPrefsListItem>();
 
-         GetWindowsKeys.GetKeys();
+         _prefsKeyReader.GetKeys();
 
-         if (PmPrefsList.Count > 0)
+         if (_listViewPmPrefsList != null)
             FillList(_listViewPmPrefsList, PmPrefsList);
 
-         if (PlayerPrefsList.Count > 0)
+         if (_listViewPlayerPrefsList != null)
             FillList(_listViewPlayerPrefsList, PlayerPrefsList);
       }
 
@@ -396,64 +534,126 @@ namespace PM.Plugins
       {
          var key = _changeSecureKeyField.value;
 
-         if (key.Length < 8)
+         if (string.IsNullOrEmpty(key) || key.Length < 8)
          {
-            EditorUtility.DisplayDialog("Error", "Key must be at least 8 characters long", "OK");
+            EditorUtility.DisplayDialog("Invalid Key",
+               "The secure key must be at least 8 characters long.", "OK");
             return;
          }
 
-         if (!Regex.IsMatch(key, @"^[a-zA-Z0-9][\w]*$"))
+         if (!Regex.IsMatch(key, @"^[a-zA-Z0-9]+$"))
          {
-            EditorUtility.DisplayDialog("Error", "Key must be alphanumeric", "OK");
+            EditorUtility.DisplayDialog("Invalid Key",
+               "The secure key must contain only alphanumeric characters (a-z, A-Z, 0-9).", "OK");
             return;
          }
 
-         if (EditorUtility.DisplayDialog("Change Key", "Are you sure you want to change the secure key?\nAll PmPrefs will be deleted!", "Yes", "No"))
+         if (!EditorUtility.DisplayDialog("Change Secure Key",
+            "WARNING: Changing the secure key will invalidate all existing PmPrefs data!\n\n" +
+            "All encrypted data will be deleted because it cannot be decrypted with the new key.\n\n" +
+            "Are you sure you want to continue?",
+            "Yes, Change Key", "Cancel"))
          {
-            PmPrefs.DeleteAll();
-            PmPrefs.SaveAll();
+            return;
+         }
 
-            PmPrefsList.Clear();
-            PlayerPrefsList.Clear();
+         // Delete all PmPrefs (they can't be decrypted with new key)
+         PmPrefs.DeleteAllPmPrefs();
+         PlayerPrefs.Save();
 
-            _listViewPmPrefsList.Clear();
-            _listViewPlayerPrefsList.Clear();
+         // Find and update the PmPrefs.cs file
+         string filePath = FindPmPrefsFile();
 
-            var file = FindFile("PmPrefs.cs", Application.dataPath);
-            string[] readText = File.ReadAllLines(file);
+         if (string.IsNullOrEmpty(filePath))
+         {
+            EditorUtility.DisplayDialog("Error",
+               "Could not find PmPrefs.cs file.\n\n" +
+               "The secure key could not be changed automatically.\n" +
+               "Please manually update the SecureKey constant in PmPrefs.cs.", "OK");
+            return;
+         }
 
-            for (var i = 0; i < readText.Length; i++)
+         try
+         {
+            string[] lines = File.ReadAllLines(filePath);
+            bool found = false;
+
+            for (int i = 0; i < lines.Length; i++)
             {
-               string s = readText[i];
-               if (s.Contains("private const string SecureKey ="))
+               if (lines[i].Contains("public const string SecureKey ="))
                {
-                  string toReplace = Regex.Match(s, "\"([^\"]*)\"").Groups[1].Value;
-                  string correctString = s.Replace(toReplace, key);
-                  readText[i] = correctString;
-
-                  File.WriteAllLines(file, readText);
-                  return;
+                  string toReplace = Regex.Match(lines[i], @"""([^""]*)""").Groups[1].Value;
+                  lines[i] = lines[i].Replace($"\"{toReplace}\"", $"\"{key}\"");
+                  found = true;
+                  break;
                }
             }
 
-            Initialize();
+            if (found)
+            {
+               File.WriteAllLines(filePath, lines);
+               AssetDatabase.Refresh();
+
+               EditorUtility.DisplayDialog("Success",
+                  $"Secure key has been changed.\n\nThe project will recompile with the new key.", "OK");
+            }
+            else
+            {
+               EditorUtility.DisplayDialog("Error",
+                  "Could not find SecureKey constant in PmPrefs.cs.\n\n" +
+                  "Please manually update the SecureKey constant.", "OK");
+            }
          }
+         catch (Exception ex)
+         {
+            EditorUtility.DisplayDialog("Error",
+               $"Failed to update PmPrefs.cs:\n{ex.Message}", "OK");
+         }
+
+         _prefsKeyReader.InvalidateCache();
+         RefreshLists();
       }
 
-      private string FindFile(string filename, string folder)
+      /// <summary>
+      /// Finds the PmPrefs.cs file in either Packages or Assets folder.
+      /// </summary>
+      private string FindPmPrefsFile()
       {
-         var files = Directory.GetFiles(folder, filename);
+         // First check in Packages folder
+         string packagePath = Path.GetFullPath("Packages/com.projectmakers.pmprefs/Scripts/PmPrefs.cs");
+         if (File.Exists(packagePath))
+            return packagePath;
 
-         if (files.Length > 0)
-            return files[0];
-
-         var dirs = Directory.GetDirectories(folder);
-
-         foreach (var dir in dirs)
+         // Check in Assets folder (for development)
+         string[] guids = AssetDatabase.FindAssets("PmPrefs t:Script");
+         foreach (string guid in guids)
          {
-            var file = FindFile(filename, dir);
-            if (file != null)
-               return file;
+            string path = AssetDatabase.GUIDToAssetPath(guid);
+            if (path.EndsWith("PmPrefs.cs") && !path.Contains("Editor"))
+            {
+               return Path.GetFullPath(path);
+            }
+         }
+
+         // Last resort: recursive search in Assets
+         return FindFileRecursive("PmPrefs.cs", Application.dataPath);
+      }
+
+      private string FindFileRecursive(string filename, string folder)
+      {
+         try
+         {
+            var files = Directory.GetFiles(folder, filename, SearchOption.AllDirectories);
+            foreach (var file in files)
+            {
+               // Skip editor scripts
+               if (!file.Contains("Editor"))
+                  return file;
+            }
+         }
+         catch (Exception)
+         {
+            // Ignore access denied errors
          }
 
          return null;

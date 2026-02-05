@@ -1,47 +1,133 @@
 # PmPrefs - Unity Editor Extension
 
-## Vorwort
-Das Speichern und Laden von Daten in Unity kann kompliziert sein, aber nicht mehr mit PmPrefs. Diese Unity Editor Extension macht das Speichern und Laden von Daten so einfach wie nie zuvor.
+[![Unity](https://img.shields.io/badge/Unity-2018.1%2B-blue.svg)](https://unity.com/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE.md)
+
+A simple and secure way to save and load data in Unity games. PmPrefs wraps Unity's PlayerPrefs with automatic AES encryption and provides a visual editor for managing preferences.
 
 ## Features
 
-### Einfache Speicherung
-Mit nur einer Zeile Code können Sie alle .NET-Objekte speichern.
+### Simple Save & Load
+Save any serializable .NET object with a single line of code:
 ```csharp
-PmPrefs.Save("name", variable);
+PmPrefs.Save("playerName", "John");
+PmPrefs.Save("settings", mySettingsObject);
 ```
 
-### Einfaches Laden
-Das Laden ist genauso einfach, mit einem kleinen Unterschied: Sie müssen den Datentyp angeben.
+Load data just as easily (specify the type):
 ```csharp
-PmPrefs.Load<type>("name");
+string name = PmPrefs.Load<string>("playerName", "DefaultName");
+MySettings settings = PmPrefs.Load<MySettings>("settings");
 ```
 
-### Sichere Speicherung
-Variablen werden verschlüsselt gespeichert, sodass Sie sicher sein können, dass sie nicht einfach manipuliert werden können.
+### Secure Storage
+All data is automatically encrypted using AES-256 encryption. Your saved data cannot be easily read or manipulated by users.
 
-### Export / Import
-Machen Sie mehrere Tests oder arbeiten Sie an verschiedenen Teilen Ihres Projekts? Mit PmPrefs können Sie verschiedene Zustände speichern und wieder laden.
+### Visual Editor
+Access the editor window via **Tools > ProjectMakers > PmPrefs**:
+- View and edit all PmPrefs and PlayerPrefs
+- Toggle between encrypted and decrypted view
+- Create, modify, and delete preferences
+- Import/Export to CSV for backup or migration
 
-### Und mehr ...
-- Voll kompatibel mit Unity PlayerPrefs.
-- Keine besonderen Rechte auf dem Endgerät erforderlich.
-- Funktioniert mit allen Unity-unterstützten Systemen.
-
-## Warum ist das so besonders?
-PmPrefs verwendet weiterhin Unitys PlayerPrefs, unterstützt jedoch alle Unity-Systeme ohne spezielle Rechte auf dem jeweiligen Endgerät.
-
-## Verschlüsselung
-Es gibt verschiedene Gründe, warum Sie gespeicherte Variablen verschlüsseln möchten. Einer davon ist, dass Passwörter oder andere sensible Daten nicht im Klartext auf dem System gespeichert werden.
-
-## Anwendungsbeispiele
-Stellen Sie sich vor, jemand schreibt eine Online-Banking-App und speichert das Passwort im Klartext im Windows-Register. Nicht sehr gut, oder? Mit PmPrefs ist das kein Problem.
+### Cross-Platform
+- Works on Windows, macOS, and Linux in the Editor
+- Runtime API works on all Unity-supported platforms
+- No special permissions required on target devices
 
 ## Installation
-Kopieren Sie einfach den Code der `PmPrefs` Klasse in Ihr Unity-Projekt.
 
-## Benutzung
-Nach der Installation können Sie die `PmPrefs` Klasse in Ihren Scripts verwenden, genau wie in den oben genannten Beispielen.
+### Via Package Manager (Recommended)
+1. Open **Window > Package Manager**
+2. Click the **+** button and select **Add package from git URL**
+3. Enter: `https://github.com/YourUsername/Unity-PmPrefs.git`
+4. Click **Add**
 
-## Unterstützung
-Haben Sie Probleme oder Anregungen? Öffnen Sie ein [Issue](HierIhrenIssueTrackerLinkEinfügen).
+### Manual Installation
+1. Download or clone this repository
+2. Copy the folder into your project's `Packages` directory
+
+## Usage
+
+### Basic Operations
+
+```csharp
+using PM.Plugins;
+
+// Save data
+PmPrefs.Save("score", 100);
+PmPrefs.Save("player", new PlayerData { Name = "John", Level = 5 });
+
+// Load data
+int score = PmPrefs.Load<int>("score", 0);
+PlayerData player = PmPrefs.Load<PlayerData>("player");
+
+// Check if key exists
+if (PmPrefs.HasKey("score"))
+{
+    // Key exists
+}
+
+// Delete specific key
+PmPrefs.DeleteKey("score");
+
+// Delete all PmPrefs (keeps regular PlayerPrefs)
+PmPrefs.DeleteAllPmPrefs();
+
+// Force save to disk
+PmPrefs.SaveAll();
+```
+
+### Manual Encryption
+You can also use the encryption methods directly:
+```csharp
+string encrypted = PmPrefs.Encrypt("sensitive data");
+string decrypted = PmPrefs.Decrypt(encrypted);
+```
+
+### Using Enums as Keys
+```csharp
+public enum SaveKey { PlayerName, HighScore, Settings }
+
+PmPrefs.Save(SaveKey.PlayerName, "John");
+string name = PmPrefs.Load<SaveKey, string>(SaveKey.PlayerName, "Guest");
+```
+
+## Security Note
+
+The encryption key is stored in the source code (`PmPrefs.cs`). For production use:
+
+1. **Change the default key**: Use the Configuration panel in the editor window, or manually edit `SecureKey` in `PmPrefs.cs`
+2. **Use a unique key per project**: Don't use the default key in released games
+3. **Understand the limitations**: This protects against casual inspection, not determined attackers with access to your compiled code
+
+## Editor Window
+
+Open via **Tools > ProjectMakers > PmPrefs**
+
+| Button | Function |
+|--------|----------|
+| Create | Add a new preference |
+| Configuration | Change encryption key, import/export |
+| Delete All | Remove all preferences |
+| Save | Save pending changes |
+| Shield icon | Toggle encrypted/decrypted view |
+| Refresh | Reload preferences from storage |
+| PmPrefs/PlayerPrefs | Switch between preference lists |
+
+## Requirements
+
+- Unity 2018.1 or later (tested up to Unity 6000)
+- .NET Standard 2.0 or later
+
+## Support
+
+Having issues or suggestions? [Open an issue](https://github.com/YourUsername/Unity-PmPrefs/issues) on GitHub.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details.
+
+---
+
+*Made by [ProjectMakers](https://projectmakers.de)*
