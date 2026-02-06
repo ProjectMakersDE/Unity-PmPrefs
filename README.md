@@ -28,6 +28,7 @@ Access the editor window via **Tools > ProjectMakers > PmPrefs**:
 - View and edit all PmPrefs and PlayerPrefs
 - Toggle between encrypted and decrypted view
 - Create, modify, and delete preferences
+- Copy keys and values to clipboard with one click
 - Import/Export to CSV for backup or migration
 
 ### Cross-Platform
@@ -114,6 +115,7 @@ Open via **Tools > ProjectMakers > PmPrefs**
 | Shield icon | Toggle encrypted/decrypted view |
 | Refresh | Reload preferences from storage |
 | PmPrefs/PlayerPrefs | Switch between preference lists |
+| Copy buttons | Copy preference key or value to clipboard (per item) |
 
 ## Requirements
 

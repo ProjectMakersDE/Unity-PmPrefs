@@ -1,3 +1,4 @@
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.UIElements;
 
@@ -12,6 +13,8 @@ namespace PM.Plugins
       private Label _keyLabel;
       private TextField _valueField;
       private Toggle _deleteToggle;
+      private Button _copyKeyButton;
+      private Button _copyValueButton;
       private bool _isChanged;
 
       private PmPrefsListItem _data;
@@ -21,6 +24,7 @@ namespace PM.Plugins
       private static readonly Color ChangedBorderColor = new Color(0.35f, 0.61f, 0.3f);
       private static readonly Color DeleteBorderColor = new Color(0.6f, 0.27f, 0.27f);
       private static readonly Color TransparentColor = new Color(0, 0, 0, 0);
+      private static readonly Color CopyFeedbackColor = new Color(0.4f, 0.8f, 0.4f, 0.3f);
 
       /// <summary>
       /// Sets up the visual element references for this controller.
@@ -32,6 +36,8 @@ namespace PM.Plugins
          _keyLabel = visualElement.Q<Label>("Item_name");
          _valueField = visualElement.Q<TextField>("Item_value");
          _deleteToggle = visualElement.Q<Toggle>("Item_delete");
+         _copyKeyButton = visualElement.Q<Button>("Item_copy_key");
+         _copyValueButton = visualElement.Q<Button>("Item_copy_value");
       }
 
       /// <summary>
@@ -81,6 +87,14 @@ namespace PM.Plugins
          // Unregister old callbacks to prevent duplicates
          _valueField.UnregisterValueChangedCallback(OnValueChanged);
          _deleteToggle.UnregisterValueChangedCallback(OnDeleteChanged);
+         if (_copyKeyButton != null)
+         {
+            _copyKeyButton.clicked -= OnCopyKeyClicked;
+         }
+         if (_copyValueButton != null)
+         {
+            _copyValueButton.clicked -= OnCopyValueClicked;
+         }
 
          // Set initial values
          _keyLabel.text = _data.Key;
@@ -106,6 +120,18 @@ namespace PM.Plugins
          // Register callbacks
          _valueField.RegisterValueChangedCallback(OnValueChanged);
          _deleteToggle.RegisterValueChangedCallback(OnDeleteChanged);
+
+         // Wire up copy button handlers and set tooltips
+         if (_copyKeyButton != null)
+         {
+            _copyKeyButton.clicked += OnCopyKeyClicked;
+            _copyKeyButton.tooltip = "Copy key to clipboard";
+         }
+         if (_copyValueButton != null)
+         {
+            _copyValueButton.clicked += OnCopyValueClicked;
+            _copyValueButton.tooltip = "Copy value to clipboard";
+         }
       }
 
       private void OnDeleteChanged(ChangeEvent<bool> evt)
@@ -170,6 +196,48 @@ namespace PM.Plugins
          _valueField.style.borderLeftColor = TransparentColor;
          _valueField.style.borderRightColor = TransparentColor;
          _valueField.style.borderTopColor = TransparentColor;
+      }
+
+      /// <summary>
+      /// Handles copy key button click - copies the preference key to the clipboard.
+      /// </summary>
+      private void OnCopyKeyClicked()
+      {
+         EditorGUIUtility.systemCopyBuffer = _keyLabel.text;
+         ProvideCopyFeedback(_copyKeyButton);
+      }
+
+      /// <summary>
+      /// Handles copy value button click - copies the preference value to the clipboard.
+      /// </summary>
+      private void OnCopyValueClicked()
+      {
+         EditorGUIUtility.systemCopyBuffer = _valueField.value;
+         ProvideCopyFeedback(_copyValueButton);
+      }
+
+      /// <summary>
+      /// Provides brief visual feedback when a copy operation succeeds.
+      /// </summary>
+      /// <param name="button">The button that was clicked.</param>
+      private void ProvideCopyFeedback(Button button)
+      {
+         if (button == null) return;
+
+         // Store original color
+         var originalColor = button.style.backgroundColor.value;
+
+         // Apply feedback color
+         button.style.backgroundColor = CopyFeedbackColor;
+
+         // Reset after brief delay (300ms)
+         EditorApplication.delayCall += () =>
+         {
+            if (button != null)
+            {
+               button.style.backgroundColor = originalColor;
+            }
+         };
       }
    }
 }
