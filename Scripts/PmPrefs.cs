@@ -24,9 +24,25 @@ namespace PM.Plugins
    /// </example>
    public static class PmPrefs
    {
-      // Wrapper class for JSON serialization of List<string> (Unity's JsonUtility doesn't support generic List directly)
+      /// <summary>
+      /// Wrapper class for JSON serialization of HashSet&lt;string&gt;.
+      /// Uses HashSet for O(1) key lookups, additions, and removals, providing better performance than List&lt;string&gt;
+      /// which would require O(n) operations for duplicate checking and removals.
+      /// Unity's JsonUtility doesn't support generic HashSet directly, so this wrapper enables serialization.
+      /// </summary>
       [Serializable]
       private class StringListWrapper
+      {
+         public HashSet<string> items = new HashSet<string>();
+      }
+
+      /// <summary>
+      /// Legacy wrapper class for backward compatibility with old List&lt;string&gt; format.
+      /// Used only for migrating existing data to the new HashSet-based format.
+      /// The List format is deprecated due to O(n) performance for duplicate checking and removals.
+      /// </summary>
+      [Serializable]
+      private class LegacyStringListWrapper
       {
          public List<string> items = new List<string>();
       }
@@ -53,7 +69,19 @@ namespace PM.Plugins
       private static byte[] _keyBytes;
       private static string _currentSecureKey;
 
-      private static List<string> List
+      /// <summary>
+      /// Gets the internal HashSet used for tracking all PmPrefs keys.
+      /// Uses HashSet for O(1) performance on add, remove, and contains operations.
+      /// Automatically handles migration from legacy List&lt;string&gt; format to HashSet on first access.
+      /// </summary>
+      /// <remarks>
+      /// Performance benefits of HashSet over List:
+      /// - Add with duplicate check: O(1) vs O(n)
+      /// - Remove: O(1) vs O(n)
+      /// - Contains: O(1) vs O(n)
+      /// This significantly improves performance when managing large numbers of keys.
+      /// </remarks>
+      private static HashSet<string> List
       {
          get
          {
@@ -61,17 +89,44 @@ namespace PM.Plugins
             {
                if (PlayerPrefs.HasKey(KeyListKey))
                {
-                  try
+                  string json = PlayerPrefs.GetString(KeyListKey);
+                  if (!string.IsNullOrEmpty(json))
                   {
-                     string json = PlayerPrefs.GetString(KeyListKey);
-                     if (!string.IsNullOrEmpty(json))
+                     // Try loading as new format (HashSet)
+                     try
                      {
                         _listWrapper = JsonUtility.FromJson<StringListWrapper>(json);
                      }
-                  }
-                  catch (Exception ex)
-                  {
-                     Debug.LogWarning($"[PmPrefs] Failed to load key list: {ex.Message}");
+                     catch (Exception ex)
+                     {
+                        Debug.LogWarning($"[PmPrefs] Failed to load key list as new format: {ex.Message}");
+                     }
+
+                     // If new format failed or resulted in empty items, try loading as legacy format (List)
+                     if (_listWrapper == null || _listWrapper.items == null || _listWrapper.items.Count == 0)
+                     {
+                        try
+                        {
+                           LegacyStringListWrapper legacyWrapper = JsonUtility.FromJson<LegacyStringListWrapper>(json);
+                           if (legacyWrapper != null && legacyWrapper.items != null && legacyWrapper.items.Count > 0)
+                           {
+                              // Convert legacy List to new HashSet format
+                              _listWrapper = new StringListWrapper();
+                              foreach (var item in legacyWrapper.items)
+                              {
+                                 _listWrapper.items.Add(item);
+                              }
+
+                              // Save in new format to complete migration
+                              SaveKeyList();
+                              Debug.Log("[PmPrefs] Migrated key list from legacy List format to HashSet format");
+                           }
+                        }
+                        catch (Exception ex)
+                        {
+                           Debug.LogWarning($"[PmPrefs] Failed to load key list as legacy format: {ex.Message}");
+                        }
+                     }
                   }
                }
 
@@ -101,24 +156,43 @@ namespace PM.Plugins
          return _keyBytes;
       }
 
+      /// <summary>
+      /// Adds a key to the internal HashSet tracking system.
+      /// HashSet.Add automatically prevents duplicates and returns false if the key already exists,
+      /// eliminating the need for manual Contains checks (O(1) vs O(n) with List).
+      /// Only saves to PlayerPrefs if the key was actually added.
+      /// </summary>
+      /// <param name="key">The key to add to the tracking system.</param>
       private static void AddKeyToList(string key)
       {
          if (string.IsNullOrEmpty(key)) return;
-         if (List.Contains(key)) return;
 
-         List.Add(key);
-         SaveKeyList();
+         if (List.Add(key))
+         {
+            SaveKeyList();
+         }
       }
 
+      /// <summary>
+      /// Removes a key from the internal HashSet tracking system.
+      /// HashSet.Remove provides O(1) performance compared to List.Remove which requires O(n) searching.
+      /// Only saves to PlayerPrefs if the key was actually removed.
+      /// </summary>
+      /// <param name="key">The key to remove from the tracking system.</param>
       private static void RemoveKeyFromList(string key)
       {
          if (string.IsNullOrEmpty(key)) return;
-         if (!List.Contains(key)) return;
 
-         List.Remove(key);
-         SaveKeyList();
+         if (List.Remove(key))
+         {
+            SaveKeyList();
+         }
       }
 
+      /// <summary>
+      /// Serializes and saves the HashSet-based key list to PlayerPrefs.
+      /// The HashSet is wrapped in StringListWrapper for JSON serialization compatibility.
+      /// </summary>
       private static void SaveKeyList()
       {
          string json = JsonUtility.ToJson(_listWrapper);

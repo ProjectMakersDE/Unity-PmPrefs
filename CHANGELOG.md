@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Improved error handling throughout the codebase
 - Updated README to English with comprehensive documentation
 - Optimized UI refresh - SaveAll no longer rebuilds entire UI
+- Optimized key tracking by replacing `List<string>` with `HashSet<string>` for O(1) lookups
 
 ### Fixed
 - Fixed JsonUtility not supporting `List<string>` - now uses wrapper class
