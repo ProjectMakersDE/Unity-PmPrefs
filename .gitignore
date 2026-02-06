@@ -51,7 +51,17 @@ crashlytics-build.properties
 *.swp
 *.swo
 
-# Claude AI
+# Claude AI and Auto Claude
 .claude/
-Claude.md
-CLAUDE.md
+.auto-claude/
+.claude_settings.json
+.auto-claude-security.json
+.auto-claude-status
+.auto-claude-*
+.security-key
+.worktrees/
+logs/security/
+*claude*.log
+*claude*.tmp
+
+# Note: CLAUDE.md is intentionally tracked in git
