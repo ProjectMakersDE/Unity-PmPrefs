@@ -826,8 +826,16 @@ namespace PM.Plugins
 
       private void RefreshLists()
       {
-         PmPrefsList = new List<PmPrefsListItem>();
-         PlayerPrefsList = new List<PmPrefsListItem>();
+         // Initialize lists on first call, otherwise clear and reuse
+         if (PmPrefsList == null)
+            PmPrefsList = new List<PmPrefsListItem>();
+         else
+            PmPrefsList.Clear();
+
+         if (PlayerPrefsList == null)
+            PlayerPrefsList = new List<PmPrefsListItem>();
+         else
+            PlayerPrefsList.Clear();
 
          _prefsKeyReader.GetKeys();
 

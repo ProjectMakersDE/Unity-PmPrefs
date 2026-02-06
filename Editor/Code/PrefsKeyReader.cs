@@ -22,6 +22,7 @@ namespace PM.Plugins
    {
       private readonly PmPrefsEditorWindow _editorWindow;
       private Dictionary<string, object> _cachedKeys;
+      private List<KeyValuePair<string, object>> _cachedSortedKeys;
       private DateTime _lastCacheTime;
       private static readonly TimeSpan CacheTimeout = TimeSpan.FromSeconds(2);
 
@@ -42,9 +43,9 @@ namespace PM.Plugins
       /// </summary>
       public void GetKeys()
       {
-         var allKeys = GetAllPlayerPrefsKeys();
+         GetAllPlayerPrefsKeys();
 
-         foreach (var kvp in allKeys.OrderBy(k => k.Key))
+         foreach (var kvp in _cachedSortedKeys)
          {
             string keyName = kvp.Key;
             object value = kvp.Value;
@@ -115,6 +116,9 @@ namespace PM.Plugins
          _cachedKeys = GetKeysFromTrackedList();
 #endif
 
+         // Create sorted cache to avoid repeated OrderBy operations
+         _cachedSortedKeys = _cachedKeys.OrderBy(k => k.Key).ToList();
+
          _lastCacheTime = DateTime.Now;
          return _cachedKeys;
       }
@@ -125,6 +129,7 @@ namespace PM.Plugins
       public void InvalidateCache()
       {
          _cachedKeys = null;
+         _cachedSortedKeys = null;
       }
 
 #if UNITY_EDITOR_WIN
