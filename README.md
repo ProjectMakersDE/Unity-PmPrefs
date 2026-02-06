@@ -94,6 +94,207 @@ PmPrefs.Save(SaveKey.PlayerName, "John");
 string name = PmPrefs.Load<SaveKey, string>(SaveKey.PlayerName, "Guest");
 ```
 
+## Serialization Requirements
+
+PmPrefs uses Unity's `JsonUtility` for serialization, which has specific requirements for the types you can save:
+
+### Supported Types
+- **Primitives**: `int`, `float`, `string`, `bool`, etc.
+- **Unity types**: `Vector3`, `Color`, `Quaternion`, etc.
+- **Custom classes**: Must be marked with `[Serializable]` attribute
+- **Arrays**: Single-dimensional arrays of supported types
+
+```csharp
+// ✓ These work fine
+PmPrefs.Save("score", 100);
+PmPrefs.Save("position", new Vector3(1, 2, 3));
+
+[Serializable]
+public class PlayerData
+{
+    public string name;
+    public int level;
+}
+PmPrefs.Save("player", new PlayerData { name = "John", level = 5 });
+```
+
+### Unsupported Types (Without Workarounds)
+- **Generic collections**: `List<T>`, `Dictionary<K,V>`, `HashSet<T>`
+- **Nested generics**: `List<List<T>>`
+- **Interfaces and abstract classes**
+
+```csharp
+// ✗ These will NOT work directly
+List<string> items = new List<string> { "item1", "item2" };
+PmPrefs.Save("items", items); // JsonUtility cannot serialize List<T> directly
+
+Dictionary<string, int> scores = new Dictionary<string, int>();
+PmPrefs.Save("scores", scores); // JsonUtility cannot serialize Dictionary<K,V>
+```
+
+### Workaround: Wrapper Classes
+To save generic collections, wrap them in a serializable class:
+
+#### Example 1: List of Strings
+```csharp
+[Serializable]
+public class StringListWrapper
+{
+    public List<string> items = new List<string>();
+}
+
+// Save the list
+StringListWrapper wrapper = new StringListWrapper();
+wrapper.items = new List<string> { "item1", "item2", "item3" };
+PmPrefs.Save("itemList", wrapper);
+
+// Load it back
+StringListWrapper loaded = PmPrefs.Load<StringListWrapper>("itemList");
+List<string> myItems = loaded.items;
+```
+
+#### Example 2: List of Custom Objects
+```csharp
+[Serializable]
+public class PlayerData
+{
+    public string name;
+    public int level;
+    public float health;
+}
+
+[Serializable]
+public class PlayerListWrapper
+{
+    public List<PlayerData> players = new List<PlayerData>();
+}
+
+// Save a list of players
+PlayerListWrapper wrapper = new PlayerListWrapper();
+wrapper.players.Add(new PlayerData { name = "Alice", level = 10, health = 100f });
+wrapper.players.Add(new PlayerData { name = "Bob", level = 15, health = 85f });
+PmPrefs.Save("playerList", wrapper);
+
+// Load it back
+PlayerListWrapper loaded = PmPrefs.Load<PlayerListWrapper>("playerList");
+foreach (var player in loaded.players)
+{
+    Debug.Log($"{player.name}: Level {player.level}");
+}
+```
+
+#### Example 3: Dictionary Workaround
+Since `JsonUtility` doesn't support dictionaries, convert them to lists of key-value pairs:
+
+```csharp
+[Serializable]
+public class StringIntPair
+{
+    public string key;
+    public int value;
+}
+
+[Serializable]
+public class StringIntDictionaryWrapper
+{
+    public List<StringIntPair> items = new List<StringIntPair>();
+
+    // Helper methods for easy conversion
+    public void FromDictionary(Dictionary<string, int> dict)
+    {
+        items.Clear();
+        foreach (var kvp in dict)
+        {
+            items.Add(new StringIntPair { key = kvp.Key, value = kvp.Value });
+        }
+    }
+
+    public Dictionary<string, int> ToDictionary()
+    {
+        Dictionary<string, int> dict = new Dictionary<string, int>();
+        foreach (var item in items)
+        {
+            dict[item.key] = item.value;
+        }
+        return dict;
+    }
+}
+
+// Save a dictionary
+Dictionary<string, int> highScores = new Dictionary<string, int>
+{
+    { "Alice", 1000 },
+    { "Bob", 850 },
+    { "Charlie", 920 }
+};
+
+StringIntDictionaryWrapper wrapper = new StringIntDictionaryWrapper();
+wrapper.FromDictionary(highScores);
+PmPrefs.Save("highScores", wrapper);
+
+// Load it back
+StringIntDictionaryWrapper loaded = PmPrefs.Load<StringIntDictionaryWrapper>("highScores");
+Dictionary<string, int> scores = loaded.ToDictionary();
+```
+
+#### Example 4: Generic Dictionary Wrapper
+For reusability, create a generic wrapper pattern:
+
+```csharp
+[Serializable]
+public class SerializableKeyValuePair<TKey, TValue>
+{
+    public TKey key;
+    public TValue value;
+
+    public SerializableKeyValuePair() { }
+    public SerializableKeyValuePair(TKey k, TValue v) { key = k; value = v; }
+}
+
+[Serializable]
+public class SerializableDictionary<TKey, TValue>
+{
+    public List<SerializableKeyValuePair<TKey, TValue>> items = new List<SerializableKeyValuePair<TKey, TValue>>();
+
+    public void FromDictionary(Dictionary<TKey, TValue> dict)
+    {
+        items.Clear();
+        foreach (var kvp in dict)
+        {
+            items.Add(new SerializableKeyValuePair<TKey, TValue>(kvp.Key, kvp.Value));
+        }
+    }
+
+    public Dictionary<TKey, TValue> ToDictionary()
+    {
+        Dictionary<TKey, TValue> dict = new Dictionary<TKey, TValue>();
+        foreach (var item in items)
+        {
+            dict[item.key] = item.value;
+        }
+        return dict;
+    }
+}
+
+// Usage with any key/value types
+Dictionary<string, PlayerData> playerRegistry = new Dictionary<string, PlayerData>();
+playerRegistry["player1"] = new PlayerData { name = "Alice", level = 10, health = 100f };
+
+SerializableDictionary<string, PlayerData> wrapper = new SerializableDictionary<string, PlayerData>();
+wrapper.FromDictionary(playerRegistry);
+PmPrefs.Save("playerRegistry", wrapper);
+
+// Load it back
+SerializableDictionary<string, PlayerData> loaded = PmPrefs.Load<SerializableDictionary<string, PlayerData>>("playerRegistry");
+Dictionary<string, PlayerData> registry = loaded.ToDictionary();
+```
+
+**Note**: PmPrefs internally uses this wrapper pattern for managing its own data (see `StringListWrapper` in `PmPrefs.cs`).
+
+### Learn More
+
+For complete details about Unity's JsonUtility serialization system, see the [official Unity documentation](https://docs.unity3d.com/ScriptReference/JsonUtility.html).
+
 ## Security Note
 
 The encryption key is stored in the source code (`PmPrefs.cs`). For production use:
