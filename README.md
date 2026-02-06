@@ -41,7 +41,7 @@ Access the editor window via **Tools > ProjectMakers > PmPrefs**:
 ### Via Package Manager (Recommended)
 1. Open **Window > Package Manager**
 2. Click the **+** button and select **Add package from git URL**
-3. Enter: `https://github.com/YourUsername/Unity-PmPrefs.git`
+3. Enter: `https://github.com/ProjectMakersDE/Unity-PmPrefs.git`
 4. Click **Add**
 
 ### Manual Installation
@@ -124,7 +124,7 @@ Open via **Tools > ProjectMakers > PmPrefs**
 
 ## Support
 
-Having issues or suggestions? [Open an issue](https://github.com/YourUsername/Unity-PmPrefs/issues) on GitHub.
+Having issues or suggestions? [Open an issue](https://github.com/ProjectMakersDE/Unity-PmPrefs/issues) on GitHub.
 
 ## License
 
