@@ -76,6 +76,8 @@ namespace PM.Plugins
 
       private EnumField _exportFormatField;
 
+      private Label _unsavedChangesLabel;
+
       private bool _showCreateNew;
       private bool _showConfig;
 
@@ -160,9 +162,18 @@ namespace PM.Plugins
          Repaint();
       }
 
+      /// <summary>
+      /// Override hasUnsavedChanges to integrate with Unity's built-in save dialog.
+      /// This enables Unity to prompt the user before closing the window if there are unsaved changes.
+      /// </summary>
+      public override bool hasUnsavedChanges => HasUnsavedChanges();
+
       public void CreateGUI()
       {
          Initialize();
+
+         // Set the message shown when closing window with unsaved changes
+         saveChangesMessage = "PmPrefs has unsaved changes. Do you want to save them?";
       }
 
       private void InitializeVisualElements()
@@ -213,6 +224,8 @@ namespace PM.Plugins
                _selectedExportFormat = (ExportFormat)evt.newValue;
             });
          }
+
+         _unsavedChangesLabel = _root.Q<Label>("UnsavedChanges_label");
 
          // Wire up event handlers
          _saveButton.clicked += SaveAll;
@@ -664,6 +677,7 @@ namespace PM.Plugins
 
             newListEntry.userData = newListEntryLogic;
             newListEntryLogic.SetVisualElement(newListEntry);
+            newListEntryLogic.SetOnValueChangedCallback(UpdateUnsavedChangesIndicator);
 
             return newListEntry;
          };
@@ -677,6 +691,50 @@ namespace PM.Plugins
          };
 
          listView.itemsSource = items;
+      }
+
+      private bool HasUnsavedChanges()
+      {
+         // Check PmPrefs list for changes
+         for (var i = 0; i < PmPrefsList.Count; i++)
+         {
+            var pref = PmPrefsList[i];
+            if (pref.Changed || pref.DeleteMarker)
+            {
+               return true;
+            }
+         }
+
+         // Check PlayerPrefs list for changes
+         for (var i = 0; i < PlayerPrefsList.Count; i++)
+         {
+            var pref = PlayerPrefsList[i];
+            if (pref.Changed || pref.DeleteMarker)
+            {
+               return true;
+            }
+         }
+
+         return false;
+      }
+
+      private void UpdateUnsavedChangesIndicator()
+      {
+         if (_unsavedChangesLabel == null)
+         {
+            return;
+         }
+
+         if (HasUnsavedChanges())
+         {
+            _unsavedChangesLabel.text = "Unsaved Changes";
+            _unsavedChangesLabel.style.display = DisplayStyle.Flex;
+            _unsavedChangesLabel.style.color = new StyleColor(new Color(1f, 0.647f, 0f)); // Orange warning color
+         }
+         else
+         {
+            _unsavedChangesLabel.style.display = DisplayStyle.None;
+         }
       }
 
       private void SaveAll()
@@ -753,6 +811,8 @@ namespace PM.Plugins
          {
             Debug.Log($"[PmPrefs] Saved {savedCount} items, deleted {deletedCount} items.");
          }
+
+         UpdateUnsavedChangesIndicator();
       }
 
       private void RefreshLists()
@@ -770,6 +830,7 @@ namespace PM.Plugins
 
          // Re-apply the current filter after refreshing lists
          ApplyCurrentFilter();
+         UpdateUnsavedChangesIndicator();
       }
 
       /// <summary>
@@ -875,6 +936,28 @@ namespace PM.Plugins
 
          _prefsKeyReader.InvalidateCache();
          RefreshLists();
+      }
+
+      /// <summary>
+      /// Override SaveChanges to handle the "Save" option when closing the window with unsaved changes.
+      /// Called by Unity when the user chooses to save before closing.
+      /// </summary>
+      public override void SaveChanges()
+      {
+         SaveAll();
+         base.SaveChanges();
+      }
+
+      /// <summary>
+      /// Override DiscardChanges to handle the "Don't Save" option when closing the window with unsaved changes.
+      /// Called by Unity when the user chooses to discard changes before closing.
+      /// </summary>
+      public override void DiscardChanges()
+      {
+         // Refresh lists to discard all pending changes
+         _prefsKeyReader.InvalidateCache();
+         RefreshLists();
+         base.DiscardChanges();
       }
 
       /// <summary>

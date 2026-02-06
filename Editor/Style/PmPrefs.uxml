@@ -10,6 +10,8 @@
         <uie:ToolbarSpacer />
         <uie:ToolbarButton text="Save" display-tooltip-when-elided="true" name="Save_btn" style="background-color: rgb(19, 60, 24); margin-top: 0; margin-bottom: 0; font-size: 12px; -unity-font-style: normal; margin-left: 0; margin-right: 0; -unity-text-align: middle-center; min-width: 40px;" />
         <uie:ToolbarSpacer />
+        <ui:Label text="" display-tooltip-when-elided="true" name="UnsavedChanges_label" style="display: none; color: rgb(255, 165, 0); -unity-text-align: middle-center; margin-left: 4px; margin-right: 4px; margin-top: 0; margin-bottom: 0; font-size: 11px; -unity-font-style: normal; flex-shrink: 0;" />
+        <uie:ToolbarSpacer />
         <uie:ToolbarPopupSearchField focusable="true" name="search_field" style="flex-grow: 1; min-width: 64px; flex-shrink: 1; flex-direction: row;" />
         <uie:ToolbarSpacer />
         <uie:ToolbarButton display-tooltip-when-elided="true" name="ShowEncryp_btn" style="margin-top: 0; margin-bottom: 0; margin-left: 0; margin-right: 0; -unity-text-align: middle-left; background-image: url(&quot;project://database/Packages/com.projectmakers.pmprefs/Textures/shield.png?fileID=2800000&amp;guid=079314f5f51bac444a0fc2f1e1c659da&amp;type=3#shield&quot;); -unity-background-scale-mode: stretch-to-fill; width: 24px; height: 24px; padding-left: 0; padding-right: 0; padding-top: 0; padding-bottom: 0; justify-content: space-around; align-items: auto; flex-shrink: 0; left: auto; min-width: 24px; min-height: 24px; max-width: 24px; max-height: 24px; border-left-width: 1px; border-right-width: 1px; border-top-width: 1px; border-bottom-width: 1px; flex-grow: 0; flex-direction: column;" />

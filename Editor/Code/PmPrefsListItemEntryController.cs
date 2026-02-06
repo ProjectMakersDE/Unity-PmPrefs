@@ -19,6 +19,7 @@ namespace PM.Plugins
 
       private PmPrefsListItem _data;
       private VisualElement _root;
+      private System.Action _onValueChangedCallback;
 
       // Style colors
       private static readonly Color ChangedBorderColor = new Color(0.35f, 0.61f, 0.3f);
@@ -38,6 +39,15 @@ namespace PM.Plugins
          _deleteToggle = visualElement.Q<Toggle>("Item_delete");
          _copyKeyButton = visualElement.Q<Button>("Item_copy_key");
          _copyValueButton = visualElement.Q<Button>("Item_copy_value");
+      }
+
+      /// <summary>
+      /// Sets a callback to be invoked when the value or delete state changes.
+      /// </summary>
+      /// <param name="callback">The callback action to invoke.</param>
+      public void SetOnValueChangedCallback(System.Action callback)
+      {
+         _onValueChangedCallback = callback;
       }
 
       /// <summary>
@@ -150,6 +160,8 @@ namespace PM.Plugins
          {
             ClearBorderStyle();
          }
+
+         _onValueChangedCallback?.Invoke();
       }
 
       private void OnValueChanged(ChangeEvent<string> evt)
@@ -163,6 +175,8 @@ namespace PM.Plugins
          {
             ApplyBorderStyle(ChangedBorderColor);
          }
+
+         _onValueChangedCallback?.Invoke();
       }
 
       private void UpdateHeight()
