@@ -96,6 +96,21 @@ namespace PM.Plugins
       /// </summary>
       public List<PmPrefsListItem> PmPrefsList;
 
+      /// <summary>
+      /// Filtered list of PlayerPrefs entries based on current search query.
+      /// </summary>
+      private List<PmPrefsListItem> _filteredPlayerPrefsList;
+
+      /// <summary>
+      /// Filtered list of PmPrefs entries based on current search query.
+      /// </summary>
+      private List<PmPrefsListItem> _filteredPmPrefsList;
+
+      /// <summary>
+      /// Current search query string for filtering preferences.
+      /// </summary>
+      private string _currentSearchQuery;
+
       private readonly PrefsKeyReader _prefsKeyReader;
 
       public PmPrefsEditorWindow()
@@ -212,6 +227,7 @@ namespace PM.Plugins
          _showEncryptedButton.clicked += OnShowEncryptedButtonClicked;
          _showPmPrefsButton.clicked += OnShowPmPrefsButtonClicked;
          _showPlayerPrefsButton.clicked += OnShowPlayerPrefsButtonClicked;
+         _searchField.RegisterValueChangedCallback(OnSearchFieldValueChanged);
 
          if (_searchField != null)
          {
@@ -567,6 +583,45 @@ namespace PM.Plugins
          _showPmPrefsButton.style.backgroundColor = new StyleColor(new Color(.15f, .15f, .15f));
          _listViewPlayerPrefsList.style.display = DisplayStyle.None;
          _showPlayerPrefsButton.style.backgroundColor = new StyleColor(new Color(.235f, .235f, .235f));
+      }
+
+      private void OnSearchFieldValueChanged(ChangeEvent<string> evt)
+      {
+         _currentSearchQuery = evt.newValue;
+         ApplySearchFilter();
+      }
+
+      /// <summary>
+      /// Applies the current search filter to both PmPrefs and PlayerPrefs lists.
+      /// </summary>
+      private void ApplySearchFilter()
+      {
+         if (string.IsNullOrWhiteSpace(_currentSearchQuery))
+         {
+            // No search query - show full lists
+            _filteredPmPrefsList = PmPrefsList;
+            _filteredPlayerPrefsList = PlayerPrefsList;
+         }
+         else
+         {
+            // Filter both lists based on search query (case-insensitive)
+            string query = _currentSearchQuery.ToLower();
+
+            _filteredPmPrefsList = PmPrefsList.FindAll(item =>
+               item.Key.ToLower().Contains(query) ||
+               (item.Value != null && item.Value.ToLower().Contains(query)));
+
+            _filteredPlayerPrefsList = PlayerPrefsList.FindAll(item =>
+               item.Key.ToLower().Contains(query) ||
+               (item.Value != null && item.Value.ToLower().Contains(query)));
+         }
+
+         // Update the ListViews with filtered results
+         if (_listViewPmPrefsList != null)
+            FillList(_listViewPmPrefsList, _filteredPmPrefsList);
+
+         if (_listViewPlayerPrefsList != null)
+            FillList(_listViewPlayerPrefsList, _filteredPlayerPrefsList);
       }
 
       private void CreateNewPref()
