@@ -451,7 +451,6 @@ namespace PM.Plugins
       {
          // Only delete PmPrefs, not all PlayerPrefs
          PmPrefs.DeleteAllPmPrefs();
-         PlayerPrefs.Save();
 
          using (var reader = new StreamReader(File.OpenRead(importPath), Encoding.UTF8))
          {
@@ -491,6 +490,8 @@ namespace PM.Plugins
             }
          }
 
+         // Flush key list changes, then save all to disk once
+         PmPrefs.FlushKeyList();
          PlayerPrefs.Save();
          _prefsKeyReader.InvalidateCache();
          RefreshLists();
@@ -661,7 +662,7 @@ namespace PM.Plugins
          }
 
          PmPrefs.Save(key, value);
-         PlayerPrefs.Save();
+         PmPrefs.FlushKeyList();
 
          _createNewKeyField.value = "";
          _createNewValueField.value = "";
@@ -806,6 +807,8 @@ namespace PM.Plugins
             }
          }
 
+         // Flush key list changes, then save all to disk once
+         PmPrefs.FlushKeyList();
          PlayerPrefs.Save();
          _prefsKeyReader.InvalidateCache();
 

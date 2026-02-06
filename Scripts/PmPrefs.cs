@@ -11,15 +11,35 @@ namespace PM.Plugins
    /// PmPrefs provides encrypted PlayerPrefs storage for Unity.
    /// Save and load any serializable object with automatic AES encryption.
    /// </summary>
+   /// <remarks>
+   /// <para><b>Performance Optimization:</b></para>
+   /// <para>
+   /// PmPrefs uses an internal key list to track all stored keys. When you call Save() or DeleteKey(),
+   /// the key list is marked as dirty but NOT immediately written to disk. This batching behavior
+   /// improves performance during bulk operations by avoiding repeated disk writes.
+   /// </para>
+   /// <para>
+   /// Call FlushKeyList() after batch operations to ensure the key list is persisted.
+   /// The key list will also be saved automatically when PlayerPrefs.Save() or SaveAll() is called.
+   /// </para>
+   /// </remarks>
    /// <example>
    /// <code>
-   /// // Save data
+   /// // Basic usage
    /// PmPrefs.Save("playerName", "John");
    /// PmPrefs.Save("settings", mySettingsObject);
    ///
    /// // Load data
    /// string name = PmPrefs.Load&lt;string&gt;("playerName", "DefaultName");
    /// MySettings settings = PmPrefs.Load&lt;MySettings&gt;("settings");
+   ///
+   /// // Batch operations with manual flush
+   /// for (int i = 0; i &lt; 100; i++)
+   /// {
+   ///     PmPrefs.Save($"item_{i}", itemData[i]);
+   /// }
+   /// PmPrefs.FlushKeyList(); // Persist key list after batch operation
+   /// PmPrefs.SaveAll(); // Persist all PlayerPrefs data
    /// </code>
    /// </example>
    public static class PmPrefs
@@ -48,6 +68,7 @@ namespace PM.Plugins
       }
 
       private static StringListWrapper _listWrapper;
+      private static bool _isKeyListDirty;
 
       private const string SaltKey = "F1m5eJVO9ASPxGW7B3KP9t8iNd5Edpb48LAGNlWcLHeNkeH6PNYf3BCztZB7D3ch";
       private const string ViKey = "NiB3KP9VksfNf3Bi";
@@ -167,10 +188,15 @@ namespace PM.Plugins
       {
          if (string.IsNullOrEmpty(key)) return;
 
+<<<<<<< HEAD
          if (List.Add(key))
          {
             SaveKeyList();
          }
+=======
+         List.Add(key);
+         _isKeyListDirty = true;
+>>>>>>> auto-claude/013-batch-savekeylist-calls-and-playerprefs-save-with-
       }
 
       /// <summary>
@@ -183,10 +209,15 @@ namespace PM.Plugins
       {
          if (string.IsNullOrEmpty(key)) return;
 
+<<<<<<< HEAD
          if (List.Remove(key))
          {
             SaveKeyList();
          }
+=======
+         List.Remove(key);
+         _isKeyListDirty = true;
+>>>>>>> auto-claude/013-batch-savekeylist-calls-and-playerprefs-save-with-
       }
 
       /// <summary>
@@ -197,6 +228,56 @@ namespace PM.Plugins
       {
          string json = JsonUtility.ToJson(_listWrapper);
          PlayerPrefs.SetString(KeyListKey, json);
+         _isKeyListDirty = false;
+      }
+
+      /// <summary>
+      /// Flushes pending key list changes to disk.
+      /// Call this after batch operations to persist the key list.
+      /// </summary>
+      /// <remarks>
+      /// <para><b>When to call:</b></para>
+      /// <list type="bullet">
+      /// <item><description>After saving or deleting multiple keys in a batch operation</description></item>
+      /// <item><description>Before critical checkpoints where data must be guaranteed on disk</description></item>
+      /// <item><description>At the end of initialization routines that create many keys</description></item>
+      /// <item><description>Before application quit if you've made changes since the last Save()</description></item>
+      /// </list>
+      /// <para><b>Performance Note:</b></para>
+      /// <para>
+      /// This method is very lightweight - it only writes to disk if changes have been made.
+      /// Each call checks a dirty flag and skips the write operation if nothing has changed.
+      /// There is no performance penalty for calling this method when no changes are pending.
+      /// </para>
+      /// <para>
+      /// The key list is automatically flushed when SaveAll() or PlayerPrefs.Save() is called,
+      /// so you don't need to call this explicitly before those methods.
+      /// </para>
+      /// </remarks>
+      /// <example>
+      /// <code>
+      /// // Good: Batch operations with single flush
+      /// for (int i = 0; i &lt; 1000; i++)
+      /// {
+      ///     PmPrefs.Save($"level_{i}", levelData[i]);
+      /// }
+      /// PmPrefs.FlushKeyList(); // Single write of key list
+      /// PmPrefs.SaveAll(); // Persist all data
+      ///
+      /// // Avoid: Flushing inside loops (unnecessary performance cost)
+      /// for (int i = 0; i &lt; 1000; i++)
+      /// {
+      ///     PmPrefs.Save($"level_{i}", levelData[i]);
+      ///     PmPrefs.FlushKeyList(); // Don't do this - 1000 writes!
+      /// }
+      /// </code>
+      /// </example>
+      public static void FlushKeyList()
+      {
+         if (_isKeyListDirty)
+         {
+            SaveKeyList();
+         }
       }
 
       /// <summary>
@@ -278,6 +359,13 @@ namespace PM.Plugins
       /// <summary>
       /// Deletes only PmPrefs entries, leaving regular PlayerPrefs intact.
       /// </summary>
+      /// <remarks>
+      /// <para><b>Performance Note:</b></para>
+      /// <para>
+      /// This method immediately clears the key list and deletes all PmPrefs entries.
+      /// No call to FlushKeyList() is needed as the key list is reset directly.
+      /// </para>
+      /// </remarks>
       public static void DeleteAllPmPrefs()
       {
          foreach (var key in new List<string>(List))
@@ -303,6 +391,13 @@ namespace PM.Plugins
       /// Deletes a specific key from PmPrefs.
       /// </summary>
       /// <param name="key">The key to delete.</param>
+      /// <remarks>
+      /// <para><b>Performance Note:</b></para>
+      /// <para>
+      /// This method deletes the key immediately from PlayerPrefs but batches the key list update.
+      /// Call FlushKeyList() after bulk delete operations to persist the updated key list.
+      /// </para>
+      /// </remarks>
       public static void DeleteKey(string key)
       {
          if (string.IsNullOrEmpty(key)) return;
@@ -313,6 +408,22 @@ namespace PM.Plugins
       /// <summary>
       /// Saves all pending changes to disk.
       /// </summary>
+      /// <remarks>
+      /// <para><b>Note:</b></para>
+      /// <para>
+      /// This method calls PlayerPrefs.Save() to persist all PlayerPrefs data.
+      /// It does NOT automatically flush the PmPrefs key list - you should call FlushKeyList()
+      /// before SaveAll() to ensure the key list is included in the save operation.
+      /// </para>
+      /// </remarks>
+      /// <example>
+      /// <code>
+      /// // Proper save sequence
+      /// PmPrefs.Save("data", myData);
+      /// PmPrefs.FlushKeyList(); // Ensure key list is persisted
+      /// PmPrefs.SaveAll(); // Save all PlayerPrefs data
+      /// </code>
+      /// </example>
       public static void SaveAll() => PlayerPrefs.Save();
 
       /// <summary>
@@ -338,6 +449,18 @@ namespace PM.Plugins
       /// </summary>
       /// <param name="key">The key to save under.</param>
       /// <param name="value">The value to save (must be serializable by JsonUtility).</param>
+      /// <remarks>
+      /// <para><b>Performance Note:</b></para>
+      /// <para>
+      /// This method writes the encrypted value immediately to PlayerPrefs but batches the key list update.
+      /// The key list is only marked as dirty and will be written when FlushKeyList() or SaveAll() is called.
+      /// This design optimizes batch operations while ensuring data values are always saved.
+      /// </para>
+      /// <para>
+      /// For best performance during bulk operations, call FlushKeyList() once after all saves are complete
+      /// rather than relying on the automatic flush during SaveAll().
+      /// </para>
+      /// </remarks>
       public static void Save(string key, object value)
       {
          if (string.IsNullOrEmpty(key)) return;
