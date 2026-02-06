@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using UnityEditor;
@@ -47,6 +48,7 @@ namespace PM.Plugins
       private TextField _changeSecureKeyField;
 
       private ToolbarSearchField _searchField;
+      private string _currentSearchText = "";
 
       private bool _showCreateNew;
       private bool _showConfig;
@@ -173,6 +175,11 @@ namespace PM.Plugins
          _showPmPrefsButton.clicked += OnShowPmPrefsButtonClicked;
          _showPlayerPrefsButton.clicked += OnShowPlayerPrefsButtonClicked;
 
+         if (_searchField != null)
+         {
+            _searchField.RegisterValueChangedCallback(OnSearchFieldValueChanged);
+         }
+
          // Add tooltips for better usability
          if (_saveButton != null) _saveButton.tooltip = "Save all changes to preferences";
          if (_deleteAllButton != null) _deleteAllButton.tooltip = "Delete all preferences (PmPrefs and PlayerPrefs)";
@@ -246,6 +253,46 @@ namespace PM.Plugins
       {
          _prefsKeyReader.InvalidateCache();
          RefreshLists();
+      }
+
+      private void OnSearchFieldValueChanged(ChangeEvent<string> evt)
+      {
+         _currentSearchText = evt.newValue ?? "";
+         string searchText = _currentSearchText.ToLower();
+         FilterList(_listViewPmPrefsList, PmPrefsList, searchText);
+         FilterList(_listViewPlayerPrefsList, PlayerPrefsList, searchText);
+      }
+
+      /// <summary>
+      /// Filters a list by creating a filtered itemsSource based on search text.
+      /// </summary>
+      /// <param name="listView">The list view to filter.</param>
+      /// <param name="sourceList">The complete source list.</param>
+      /// <param name="searchText">The search text (already lowercase).</param>
+      private void FilterList(ListView listView, List<PmPrefsListItem> sourceList, string searchText)
+      {
+         if (listView == null || sourceList == null) return;
+
+         // If search is empty, show all items
+         bool showAll = string.IsNullOrEmpty(searchText);
+
+         List<PmPrefsListItem> filtered;
+         if (showAll)
+         {
+            filtered = sourceList;
+         }
+         else
+         {
+            filtered = sourceList.Where(item =>
+            {
+               string key = item.Key?.ToLower() ?? "";
+               string value = item.Value?.ToLower() ?? "";
+               return key.Contains(searchText) || value.Contains(searchText);
+            }).ToList();
+         }
+
+         listView.itemsSource = filtered;
+         listView.RefreshItems();
       }
 
       private void OnShowEncryptedButtonClicked()
@@ -528,6 +575,30 @@ namespace PM.Plugins
 
          if (_listViewPlayerPrefsList != null)
             FillList(_listViewPlayerPrefsList, PlayerPrefsList);
+
+         // Re-apply the current filter after refreshing lists
+         ApplyCurrentFilter();
+      }
+
+      /// <summary>
+      /// Re-applies the current search filter to both list views.
+      /// Used after refreshing lists to maintain filter state.
+      /// </summary>
+      private void ApplyCurrentFilter()
+      {
+         if (string.IsNullOrEmpty(_currentSearchText))
+         {
+            // Reset to full lists
+            if (_listViewPmPrefsList != null)
+               _listViewPmPrefsList.itemsSource = PmPrefsList;
+            if (_listViewPlayerPrefsList != null)
+               _listViewPlayerPrefsList.itemsSource = PlayerPrefsList;
+            return;
+         }
+
+         string searchText = _currentSearchText.ToLower();
+         FilterList(_listViewPmPrefsList, PmPrefsList, searchText);
+         FilterList(_listViewPlayerPrefsList, PlayerPrefsList, searchText);
       }
 
       private void ChangeSecureKey()
