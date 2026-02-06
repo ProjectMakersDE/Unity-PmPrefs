@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Xml.Linq;
 using UnityEditor;
 using UnityEngine;
 
@@ -186,25 +187,39 @@ namespace PM.Plugins
                return GetKeysFromTrackedList();
             }
 
-            // Use plutil to convert plist to readable format
-            var startInfo = new System.Diagnostics.ProcessStartInfo
-            {
-               FileName = "/usr/bin/plutil",
-               Arguments = $"-p \"{plistPath}\"",
-               RedirectStandardOutput = true,
-               UseShellExecute = false,
-               CreateNoWindow = true
-            };
+            // Read plist XML directly (no process spawn)
+            string content = File.ReadAllText(plistPath);
 
-            using (var process = System.Diagnostics.Process.Start(startInfo))
+            // Detect binary plist format (starts with "bplist")
+            if (content.Length > 6 && content.Substring(0, 6) == "bplist")
             {
-               string output = process.StandardOutput.ReadToEnd();
-               process.WaitForExit();
+               Debug.LogWarning("[PmPrefs] Binary plist format detected. XML format required for direct parsing. Using fallback method.");
+               return GetKeysFromTrackedList();
+            }
 
-               // Parse the plutil output (it's a simple key => value format)
-               var lines = output.Split('\n');
-               foreach (var line in lines)
+            // Parse plist XML format: <key>name</key> followed by <string>value</string> (or <integer>, <real>, etc.)
+            // Match key-value pairs in the plist dict structure
+            var keyPattern = @"<key>([^<]+)</key>\s*<(string|integer|real)>([^<]*)</(string|integer|real)>";
+            var keyMatches = Regex.Matches(content, keyPattern);
+
+            foreach (Match match in keyMatches)
+            {
+               string key = match.Groups[1].Value;
+               string value = match.Groups[3].Value;
+               result[key] = value;
+            }
+
+            // Also handle boolean values (<true/> and <false/>)
+            var boolPattern = @"<key>([^<]+)</key>\s*<(true|false)\s*/>";
+            var boolMatches = Regex.Matches(content, boolPattern);
+
+            foreach (Match match in boolMatches)
+            {
+               string key = match.Groups[1].Value;
+               string value = match.Groups[2].Value;
+               if (!result.ContainsKey(key))
                {
+<<<<<<< HEAD
                   var match = PlistKeyValuePattern.Match(line);
                   if (match.Success)
                   {
@@ -212,6 +227,9 @@ namespace PM.Plugins
                      string value = match.Groups[2].Value.Trim().Trim('"');
                      result[key] = value;
                   }
+=======
+                  result[key] = value;
+>>>>>>> auto-claude/014-avoid-process-spawn-for-macos-plist-reading-use-na
                }
             }
          }
