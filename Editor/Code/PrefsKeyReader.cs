@@ -24,6 +24,12 @@ namespace PM.Plugins
       private DateTime _lastCacheTime;
       private static readonly TimeSpan CacheTimeout = TimeSpan.FromSeconds(2);
 
+      // Compiled Regex patterns for performance optimization
+      private static readonly Regex PlistKeyValuePattern = new Regex(@"""([^""]+)""\s*=>\s*(.+)", RegexOptions.Compiled);
+      private static readonly Regex AlphanumericOnlyPattern = new Regex(@"[^a-zA-Z0-9]", RegexOptions.Compiled);
+      private static readonly Regex LinuxPrefPattern = new Regex(@"<pref\s+name=""([^""]+)""[^>]*>([^<]*)</pref>", RegexOptions.Compiled);
+      private static readonly Regex LinuxKeyPattern = new Regex(@"<key\s+name=""([^""]+)""[^>]*value=""([^""]*)""", RegexOptions.Compiled);
+
       public PrefsKeyReader(PmPrefsEditorWindow editorWindow)
       {
          _editorWindow = editorWindow;
@@ -199,7 +205,7 @@ namespace PM.Plugins
                var lines = output.Split('\n');
                foreach (var line in lines)
                {
-                  var match = Regex.Match(line, @"""([^""]+)""\s*=>\s*(.+)");
+                  var match = PlistKeyValuePattern.Match(line);
                   if (match.Success)
                   {
                      string key = match.Groups[1].Value;
@@ -222,7 +228,7 @@ namespace PM.Plugins
       {
          if (string.IsNullOrEmpty(input)) return "DefaultCompany";
          // Unity replaces spaces and special chars
-         return Regex.Replace(input, @"[^a-zA-Z0-9]", "").ToLower();
+         return AlphanumericOnlyPattern.Replace(input, "").ToLower();
       }
 #endif
 
@@ -250,7 +256,7 @@ namespace PM.Plugins
 
             // Linux prefs is an XML file
             string content = File.ReadAllText(prefsPath);
-            var keyMatches = Regex.Matches(content, @"<pref\s+name=""([^""]+)""[^>]*>([^<]*)</pref>");
+            var keyMatches = LinuxPrefPattern.Matches(content);
 
             foreach (Match match in keyMatches)
             {
@@ -260,7 +266,7 @@ namespace PM.Plugins
             }
 
             // Also check for unity.* keys format
-            var unityKeyMatches = Regex.Matches(content, @"<key\s+name=""([^""]+)""[^>]*value=""([^""]*)""");
+            var unityKeyMatches = LinuxKeyPattern.Matches(content);
             foreach (Match match in unityKeyMatches)
             {
                string key = match.Groups[1].Value;

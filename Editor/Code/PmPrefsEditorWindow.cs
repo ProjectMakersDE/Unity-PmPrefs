@@ -26,6 +26,7 @@ namespace PM.Plugins
    /// </summary>
    public class PmPrefsEditorWindow : EditorWindow
    {
+<<<<<<< HEAD
       // Wrapper classes for JSON serialization
       [Serializable]
       private class ExportData
@@ -40,6 +41,11 @@ namespace PM.Plugins
          public string key;
          public string value;
       }
+=======
+      // Cached compiled Regex patterns for performance
+      private static readonly Regex AlphanumericValidationPattern = new Regex(@"^[a-zA-Z0-9]+$", RegexOptions.Compiled);
+      private static readonly Regex QuotedStringPattern = new Regex(@"""([^""]*)""", RegexOptions.Compiled);
+>>>>>>> auto-claude/012-cache-and-compile-regex-patterns-to-avoid-repeated
 
       private VisualElement _root;
 
@@ -865,7 +871,7 @@ namespace PM.Plugins
             return;
          }
 
-         if (!Regex.IsMatch(key, @"^[a-zA-Z0-9]+$"))
+         if (!AlphanumericValidationPattern.IsMatch(key))
          {
             EditorUtility.DisplayDialog("Invalid Key",
                "The secure key must contain only alphanumeric characters (a-z, A-Z, 0-9).", "OK");
@@ -906,7 +912,7 @@ namespace PM.Plugins
             {
                if (lines[i].Contains("public const string SecureKey ="))
                {
-                  string toReplace = Regex.Match(lines[i], @"""([^""]*)""").Groups[1].Value;
+                  string toReplace = QuotedStringPattern.Match(lines[i]).Groups[1].Value;
                   lines[i] = lines[i].Replace($"\"{toReplace}\"", $"\"{key}\"");
                   found = true;
                   break;
