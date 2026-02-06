@@ -73,6 +73,9 @@ CLAUDE.md
 # Auto Claude data directory
 .auto-claude/
 <<<<<<< HEAD
+<<<<<<< HEAD
 >>>>>>> auto-claude/006-fix-readme-placeholder-github-urls
 =======
 >>>>>>> auto-claude/009-add-architecture-documentation-explaining-encrypti
+=======
+>>>>>>> auto-claude/010-add-contributing-md-with-development-setup-and-gui
