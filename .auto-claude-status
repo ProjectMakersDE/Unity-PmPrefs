@@ -1,0 +1,25 @@
+{
+  "active": true,
+  "spec": "002-add-json-export-format-option",
+  "state": "building",
+  "subtasks": {
+    "completed": 5,
+    "total": 6,
+    "in_progress": 1,
+    "failed": 0
+  },
+  "phase": {
+    "current": "End-to-End Verification",
+    "id": null,
+    "total": 1
+  },
+  "workers": {
+    "active": 0,
+    "max": 1
+  },
+  "session": {
+    "number": 7,
+    "started_at": "2026-02-06T15:41:39.954264"
+  },
+  "last_update": "2026-02-06T15:53:51.150806"
+}

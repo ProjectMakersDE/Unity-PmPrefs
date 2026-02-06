@@ -12,11 +12,35 @@ using UnityEngine.UIElements;
 namespace PM.Plugins
 {
    /// <summary>
+   /// Export format options for preferences.
+   /// </summary>
+   public enum ExportFormat
+   {
+      CSV,
+      JSON
+   }
+
+   /// <summary>
    /// Editor window for managing PmPrefs and PlayerPrefs.
    /// Provides UI for viewing, editing, creating, and deleting preferences.
    /// </summary>
    public class PmPrefsEditorWindow : EditorWindow
    {
+      // Wrapper classes for JSON serialization
+      [Serializable]
+      private class ExportData
+      {
+         public List<PreferenceItem> pmPrefs = new List<PreferenceItem>();
+         public List<PreferenceItem> playerPrefs = new List<PreferenceItem>();
+      }
+
+      [Serializable]
+      private class PreferenceItem
+      {
+         public string key;
+         public string value;
+      }
+
       private VisualElement _root;
 
       private VisualTreeAsset _visualTreePmPrefsListItem;
@@ -50,8 +74,12 @@ namespace PM.Plugins
       private ToolbarSearchField _searchField;
       private string _currentSearchText = "";
 
+      private EnumField _exportFormatField;
+
       private bool _showCreateNew;
       private bool _showConfig;
+
+      private ExportFormat _selectedExportFormat = ExportFormat.CSV;
 
       /// <summary>
       /// When true, shows decrypted values. When false, shows encrypted values.
@@ -161,6 +189,16 @@ namespace PM.Plugins
 
          _searchField = _root.Q<ToolbarSearchField>("search_field");
 
+         _exportFormatField = _root.Q<EnumField>("ExportFormat_enum");
+         if (_exportFormatField != null)
+         {
+            _exportFormatField.Init(_selectedExportFormat);
+            _exportFormatField.RegisterValueChangedCallback(evt =>
+            {
+               _selectedExportFormat = (ExportFormat)evt.newValue;
+            });
+         }
+
          // Wire up event handlers
          _saveButton.clicked += SaveAll;
          _deleteAllButton.clicked += OnDeleteAllButtonClicked;
@@ -187,8 +225,9 @@ namespace PM.Plugins
          if (_configurationButton != null) _configurationButton.tooltip = "Show/hide configuration options";
          if (_refreshButton != null) _refreshButton.tooltip = "Refresh the preference lists";
          if (_showEncryptedButton != null) _showEncryptedButton.tooltip = "Toggle between encrypted and decrypted view";
-         if (_exportButton != null) _exportButton.tooltip = "Export preferences to CSV file";
-         if (_importButton != null) _importButton.tooltip = "Import preferences from CSV file";
+         if (_exportButton != null) _exportButton.tooltip = "Export preferences to CSV or JSON file";
+         if (_importButton != null) _importButton.tooltip = "Import preferences from CSV or JSON file";
+         if (_exportFormatField != null) _exportFormatField.tooltip = "Select export file format (CSV or JSON)";
       }
 
       private void OnDeleteAllButtonClicked()
@@ -209,8 +248,9 @@ namespace PM.Plugins
 
       private void OnExportButtonClicked()
       {
+         string extension = _selectedExportFormat == ExportFormat.JSON ? "json" : "csv";
          string defaultName = $"{DateTime.Now:yyyy-MM-dd}_PmPrefs_Export";
-         var path = EditorUtility.SaveFilePanel("Export Preferences", "", defaultName, "csv");
+         var path = EditorUtility.SaveFilePanel("Export Preferences", "", defaultName, extension);
 
          if (string.IsNullOrEmpty(path)) return;
 
@@ -227,7 +267,7 @@ namespace PM.Plugins
 
       private void OnImportButtonClicked()
       {
-         var path = EditorUtility.OpenFilePanel("Import Preferences", "", "csv");
+         var path = EditorUtility.OpenFilePanel("Import Preferences", "", "csv,json");
 
          if (string.IsNullOrEmpty(path)) return;
 
@@ -307,6 +347,18 @@ namespace PM.Plugins
 
       private void Export(string path)
       {
+         if (_selectedExportFormat == ExportFormat.JSON)
+         {
+            ExportJson(path);
+         }
+         else
+         {
+            ExportCsv(path);
+         }
+      }
+
+      private void ExportCsv(string path)
+      {
          var csv = new StringBuilder();
 
          foreach (var item in PmPrefsList)
@@ -325,7 +377,42 @@ namespace PM.Plugins
          File.WriteAllText(path, csv.ToString(), Encoding.UTF8);
       }
 
+      private void ExportJson(string path)
+      {
+         var exportData = new ExportData();
+
+         foreach (var item in PmPrefsList)
+         {
+            // When ShowEncrypted is true, the value is already decrypted in the list
+            // When ShowEncrypted is false, we need to decrypt for export (export should be readable)
+            string value = ShowEncrypted ? item.Value : PmPrefs.Decrypt(PlayerPrefs.GetString(PmPrefs.Prefix + item.Key));
+            exportData.pmPrefs.Add(new PreferenceItem { key = item.Key, value = value });
+         }
+
+         foreach (var item in PlayerPrefsList)
+         {
+            exportData.playerPrefs.Add(new PreferenceItem { key = item.Key, value = item.Value });
+         }
+
+         string json = JsonUtility.ToJson(exportData, true);
+         File.WriteAllText(path, json, Encoding.UTF8);
+      }
+
       private void Import(string importPath)
+      {
+         string extension = Path.GetExtension(importPath).ToLower();
+
+         if (extension == ".json")
+         {
+            ImportJson(importPath);
+         }
+         else
+         {
+            ImportCsv(importPath);
+         }
+      }
+
+      private void ImportCsv(string importPath)
       {
          // Only delete PmPrefs, not all PlayerPrefs
          PmPrefs.DeleteAllPmPrefs();
@@ -366,6 +453,56 @@ namespace PM.Plugins
                   else
                      PlayerPrefs.SetString(key, value);
                }
+            }
+         }
+
+         PlayerPrefs.Save();
+         _prefsKeyReader.InvalidateCache();
+         RefreshLists();
+      }
+
+      private void ImportJson(string importPath)
+      {
+         // Only delete PmPrefs, not all PlayerPrefs
+         PmPrefs.DeleteAllPmPrefs();
+         PlayerPrefs.Save();
+
+         string json = File.ReadAllText(importPath, Encoding.UTF8);
+         ExportData importData = JsonUtility.FromJson<ExportData>(json);
+
+         if (importData == null)
+         {
+            throw new Exception("Failed to parse JSON file. Invalid format.");
+         }
+
+         // Import PmPrefs
+         if (importData.pmPrefs != null)
+         {
+            foreach (var item in importData.pmPrefs)
+            {
+               if (string.IsNullOrEmpty(item.key)) continue;
+
+               // Save through PmPrefs API (auto-encrypts)
+               PmPrefs.Save(item.key, item.value ?? "");
+            }
+         }
+
+         // Import PlayerPrefs
+         if (importData.playerPrefs != null)
+         {
+            foreach (var item in importData.playerPrefs)
+            {
+               if (string.IsNullOrEmpty(item.key)) continue;
+
+               string value = item.value ?? "";
+
+               // Try to detect type and save appropriately
+               if (int.TryParse(value, out int intVal))
+                  PlayerPrefs.SetInt(item.key, intVal);
+               else if (float.TryParse(value, out float floatVal))
+                  PlayerPrefs.SetFloat(item.key, floatVal);
+               else
+                  PlayerPrefs.SetString(item.key, value);
             }
          }
 

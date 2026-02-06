@@ -47,6 +47,9 @@
         <ui:VisualElement name="ImportExportTitle" style="flex-direction: row; min-width: auto; min-height: auto; justify-content: center;">
             <ui:Label text="Import / Export" display-tooltip-when-elided="true" style="align-items: center; flex-direction: row; flex-grow: 0; justify-content: flex-start; -unity-text-align: upper-center; font-size: 14px; -unity-font-style: bold; border-bottom-width: 1px; border-bottom-color: rgb(32, 32, 32); margin-top: 16px; margin-bottom: 8px; padding-bottom: 2px; padding-left: 16px; padding-right: 16px;" />
         </ui:VisualElement>
+        <ui:VisualElement name="ExportFormatField" style="flex-direction: row; min-width: auto; min-height: auto; justify-content: center; margin-top: 8px; margin-bottom: 8px;">
+            <uie:EnumField label="Export Format:" name="ExportFormat_enum" style="flex-grow: 0; margin-left: 0; margin-right: 0; margin-top: 0; margin-bottom: 0; min-width: 360px; max-width: 512px;" />
+        </ui:VisualElement>
         <ui:VisualElement name="ImportExportButton" style="flex-direction: row; min-width: auto; min-height: auto; justify-content: center;">
             <ui:Button text="Import" display-tooltip-when-elided="true" name="Import_btn" tooltip="Imports PmPrefs data from a csv file. Important: the Import overwrites all existing PmPrefs and encrypts the new data with the new SecureKey (if a SecureKey is currently specified)." style="min-width: 176px; max-width: 252px;" />
             <ui:Button text="Export" display-tooltip-when-elided="true" name="Export_btn" tooltip="Exports all currently visible PmPrefs variables.\nImportant: Only the variables which are displayed are exported! Likewise, they are exported encrypted or decrypted, depending on how it is displayed in the PmPrefs Editor." style="min-width: 176px; max-width: 256px;" />
