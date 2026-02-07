@@ -102,21 +102,6 @@ namespace PM.Plugins
       /// </summary>
       public List<PmPrefsListItem> PmPrefsList;
 
-      /// <summary>
-      /// Filtered list of PlayerPrefs entries based on current search query.
-      /// </summary>
-      private List<PmPrefsListItem> _filteredPlayerPrefsList;
-
-      /// <summary>
-      /// Filtered list of PmPrefs entries based on current search query.
-      /// </summary>
-      private List<PmPrefsListItem> _filteredPmPrefsList;
-
-      /// <summary>
-      /// Current search query string for filtering preferences.
-      /// </summary>
-      private string _currentSearchQuery;
-
       private readonly PrefsKeyReader _prefsKeyReader;
 
       public PmPrefsEditorWindow()
@@ -166,18 +151,22 @@ namespace PM.Plugins
          Repaint();
       }
 
+      #if UNITY_2020_1_OR_NEWER
       /// <summary>
       /// Override hasUnsavedChanges to integrate with Unity's built-in save dialog.
       /// This enables Unity to prompt the user before closing the window if there are unsaved changes.
       /// </summary>
       public override bool hasUnsavedChanges => HasUnsavedChanges();
+      #endif
 
       public void CreateGUI()
       {
          Initialize();
 
+         #if UNITY_2020_1_OR_NEWER
          // Set the message shown when closing window with unsaved changes
          saveChangesMessage = "PmPrefs has unsaved changes. Do you want to save them?";
+         #endif
       }
 
       private void InitializeVisualElements()
@@ -244,8 +233,6 @@ namespace PM.Plugins
          _showEncryptedButton.clicked += OnShowEncryptedButtonClicked;
          _showPmPrefsButton.clicked += OnShowPmPrefsButtonClicked;
          _showPlayerPrefsButton.clicked += OnShowPlayerPrefsButtonClicked;
-         _searchField.RegisterValueChangedCallback(OnSearchFieldValueChanged);
-
          if (_searchField != null)
          {
             _searchField.RegisterValueChangedCallback(OnSearchFieldValueChanged);
@@ -603,45 +590,6 @@ namespace PM.Plugins
          _showPlayerPrefsButton.style.backgroundColor = new StyleColor(new Color(.235f, .235f, .235f));
       }
 
-      private void OnSearchFieldValueChanged(ChangeEvent<string> evt)
-      {
-         _currentSearchQuery = evt.newValue;
-         ApplySearchFilter();
-      }
-
-      /// <summary>
-      /// Applies the current search filter to both PmPrefs and PlayerPrefs lists.
-      /// </summary>
-      private void ApplySearchFilter()
-      {
-         if (string.IsNullOrWhiteSpace(_currentSearchQuery))
-         {
-            // No search query - show full lists
-            _filteredPmPrefsList = PmPrefsList;
-            _filteredPlayerPrefsList = PlayerPrefsList;
-         }
-         else
-         {
-            // Filter both lists based on search query (case-insensitive)
-            string query = _currentSearchQuery.ToLower();
-
-            _filteredPmPrefsList = PmPrefsList.FindAll(item =>
-               item.Key.ToLower().Contains(query) ||
-               (item.Value != null && item.Value.ToLower().Contains(query)));
-
-            _filteredPlayerPrefsList = PlayerPrefsList.FindAll(item =>
-               item.Key.ToLower().Contains(query) ||
-               (item.Value != null && item.Value.ToLower().Contains(query)));
-         }
-
-         // Update the ListViews with filtered results
-         if (_listViewPmPrefsList != null)
-            FillList(_listViewPmPrefsList, _filteredPmPrefsList);
-
-         if (_listViewPlayerPrefsList != null)
-            FillList(_listViewPlayerPrefsList, _filteredPlayerPrefsList);
-      }
-
       private void CreateNewPref()
       {
          string key = _createNewKeyField.text;
@@ -953,6 +901,7 @@ namespace PM.Plugins
          RefreshLists();
       }
 
+      #if UNITY_2020_1_OR_NEWER
       /// <summary>
       /// Override SaveChanges to handle the "Save" option when closing the window with unsaved changes.
       /// Called by Unity when the user chooses to save before closing.
@@ -974,6 +923,7 @@ namespace PM.Plugins
          RefreshLists();
          base.DiscardChanges();
       }
+      #endif
 
       /// <summary>
       /// Finds the PmPrefs.cs file in either Packages or Assets folder.
