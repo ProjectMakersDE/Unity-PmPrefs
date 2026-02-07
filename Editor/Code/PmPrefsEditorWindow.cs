@@ -26,7 +26,6 @@ namespace PM.Plugins
    /// </summary>
    public class PmPrefsEditorWindow : EditorWindow
    {
-<<<<<<< HEAD
       // Wrapper classes for JSON serialization
       [Serializable]
       private class ExportData
@@ -41,11 +40,10 @@ namespace PM.Plugins
          public string key;
          public string value;
       }
-=======
+
       // Cached compiled Regex patterns for performance
       private static readonly Regex AlphanumericValidationPattern = new Regex(@"^[a-zA-Z0-9]+$", RegexOptions.Compiled);
       private static readonly Regex QuotedStringPattern = new Regex(@"""([^""]*)""", RegexOptions.Compiled);
->>>>>>> auto-claude/012-cache-and-compile-regex-patterns-to-avoid-repeated
 
       private VisualElement _root;
 

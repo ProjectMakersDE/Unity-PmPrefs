@@ -53,7 +53,6 @@ crashlytics-build.properties
 
 # Claude AI and Auto Claude
 .claude/
-<<<<<<< HEAD
 .auto-claude/
 .claude_settings.json
 .auto-claude-security.json
@@ -66,28 +65,4 @@ logs/security/
 *claude*.tmp
 
 # Note: CLAUDE.md is intentionally tracked in git
-=======
-Claude.md
 CLAUDE.md
-
-# Auto Claude data directory
-.auto-claude/
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
->>>>>>> auto-claude/006-fix-readme-placeholder-github-urls
-=======
->>>>>>> auto-claude/009-add-architecture-documentation-explaining-encrypti
-=======
->>>>>>> auto-claude/010-add-contributing-md-with-development-setup-and-gui
-=======
->>>>>>> auto-claude/011-replace-list-string-with-hashset-string-for-key-tr
-=======
->>>>>>> auto-claude/012-cache-and-compile-regex-patterns-to-avoid-repeated
-=======
->>>>>>> auto-claude/013-batch-savekeylist-calls-and-playerprefs-save-with-
-=======
->>>>>>> auto-claude/014-avoid-process-spawn-for-macos-plist-reading-use-na

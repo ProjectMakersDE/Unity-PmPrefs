@@ -224,17 +224,7 @@ namespace PM.Plugins
                string value = match.Groups[2].Value;
                if (!result.ContainsKey(key))
                {
-<<<<<<< HEAD
-                  var match = PlistKeyValuePattern.Match(line);
-                  if (match.Success)
-                  {
-                     string key = match.Groups[1].Value;
-                     string value = match.Groups[2].Value.Trim().Trim('"');
-                     result[key] = value;
-                  }
-=======
                   result[key] = value;
->>>>>>> auto-claude/014-avoid-process-spawn-for-macos-plist-reading-use-na
                }
             }
          }
