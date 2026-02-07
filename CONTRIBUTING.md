@@ -193,19 +193,23 @@ PmPrefs follows Unity's package structure conventions with a clear separation be
 Unity-PmPrefs/
 ├── Scripts/                          # Runtime code (available in builds)
 │   ├── PmPrefs.cs                   # Core API for encrypted preferences
+│   ├── PmPrefsListItem.cs          # List item data model
+│   ├── PmPrefsKeyAsset.cs          # ScriptableObject for key storage
 │   └── projectmakers.pmprefs.core.asmdef
 ├── Editor/                           # Editor-only code (not included in builds)
 │   ├── Code/                        # C# editor scripts
 │   │   ├── PmPrefsEditorWindow.cs  # Main editor window
 │   │   ├── PrefsKeyReader.cs       # Platform-specific prefs reader
-│   │   ├── PmPrefsListItem.cs      # List item data model
+│   │   ├── PmPrefsListItemEntryController.cs  # List item UI controller
 │   │   └── projectmakers.pmprefs.editor.asmdef
 │   └── Style/                       # UIElements visual assets
 │       ├── PmPrefs.uxml             # Main window layout
 │       ├── PmPrefs.uss              # Stylesheet for main window
 │       └── PmPrefsListItem.uxml     # List item template
-├── Tests/                            # Unit and integration tests
-├── Documentation~/                   # Package documentation
+├── ScriptableObjects/                # Runtime ScriptableObject assets
+│   └── Resources/
+│       └── PmPrefsKeyAsset.asset
+├── Textures/                         # UI textures and icons
 └── package.json                      # Package manifest
 ```
 
@@ -216,6 +220,8 @@ Contains the **runtime code** that users will interact with in their game code:
 - **Purpose**: Core functionality available in both Editor and builds
 - **Key Files**:
   - `PmPrefs.cs`: Main static API for saving, loading, and managing encrypted preferences
+  - `PmPrefsListItem.cs`: Data model for preference entries in the editor
+  - `PmPrefsKeyAsset.cs`: ScriptableObject for storing preference key lists
 - **Usage**: This code is compiled into builds and should have minimal dependencies
 - **Best Practice**: Keep runtime code lean and avoid editor-only Unity APIs
 
@@ -246,7 +252,7 @@ C# scripts that extend the Unity Editor:
 - **Key Files**:
   - `PmPrefsEditorWindow.cs`: Main editor window using UIElements
   - `PrefsKeyReader.cs`: Platform-specific logic for reading system preferences
-  - `PmPrefsListItem.cs`: Data model for preference list items
+  - `PmPrefsListItemEntryController.cs`: UI controller for individual list items
 - **Usage**: Only compiled and available in the Unity Editor
 - **Best Practice**: Use `UnityEditor` namespace APIs freely, implement editor-specific features
 
@@ -1004,161 +1010,13 @@ PmPrefs does not currently have automated tests, so thorough manual testing is e
 
 #### Core API Testing
 
-Every change that affects the core `PmPrefs` API must be tested with the following scenarios:
+Every change that affects the core `PmPrefs` API must be tested manually in a Unity project. Create a simple test script that verifies:
 
-**1. Basic Save and Load Operations**
-
-Create a test script to verify basic functionality:
-
-```csharp
-using UnityEngine;
-using PM.Plugins;
-
-public class PmPrefsApiTest : MonoBehaviour
-{
-    void Start()
-    {
-        RunTests();
-    }
-
-    private void RunTests()
-    {
-        Debug.Log("=== PmPrefs API Tests ===");
-
-        // Test 1: Save and load string
-        PmPrefs.Save("test_string", "Hello PmPrefs!");
-        string loadedString = PmPrefs.Load<string>("test_string", "");
-        Debug.Assert(loadedString == "Hello PmPrefs!", "String test failed");
-        Debug.Log("✓ String save/load test passed");
-
-        // Test 2: Save and load int
-        PmPrefs.Save("test_int", 42);
-        int loadedInt = PmPrefs.Load<int>("test_int", 0);
-        Debug.Assert(loadedInt == 42, "Int test failed");
-        Debug.Log("✓ Int save/load test passed");
-
-        // Test 3: Save and load float
-        PmPrefs.Save("test_float", 3.14f);
-        float loadedFloat = PmPrefs.Load<float>("test_float", 0f);
-        Debug.Assert(Mathf.Approximately(loadedFloat, 3.14f), "Float test failed");
-        Debug.Log("✓ Float save/load test passed");
-
-        // Test 4: Save and load bool
-        PmPrefs.Save("test_bool", true);
-        bool loadedBool = PmPrefs.Load<bool>("test_bool", false);
-        Debug.Assert(loadedBool == true, "Bool test failed");
-        Debug.Log("✓ Bool save/load test passed");
-
-        // Test 5: Default value when key doesn't exist
-        string defaultValue = PmPrefs.Load<string>("nonexistent_key", "default");
-        Debug.Assert(defaultValue == "default", "Default value test failed");
-        Debug.Log("✓ Default value test passed");
-
-        // Test 6: HasKey check
-        Debug.Assert(PmPrefs.HasKey("test_string"), "HasKey test failed for existing key");
-        Debug.Assert(!PmPrefs.HasKey("nonexistent_key"), "HasKey test failed for nonexistent key");
-        Debug.Log("✓ HasKey test passed");
-
-        // Test 7: Delete key
-        PmPrefs.DeleteKey("test_string");
-        Debug.Assert(!PmPrefs.HasKey("test_string"), "DeleteKey test failed");
-        Debug.Log("✓ DeleteKey test passed");
-
-        // Cleanup
-        PmPrefs.DeleteKey("test_int");
-        PmPrefs.DeleteKey("test_float");
-        PmPrefs.DeleteKey("test_bool");
-
-        Debug.Log("=== All API tests passed! ===");
-    }
-}
-```
-
-**2. Complex Data Types Testing**
-
-Test serialization of custom objects:
-
-```csharp
-[System.Serializable]
-public class TestData
-{
-    public string playerName;
-    public int level;
-    public float health;
-    public bool isActive;
-}
-
-private void TestComplexTypes()
-{
-    // Save complex object
-    var testData = new TestData
-    {
-        playerName = "TestPlayer",
-        level = 10,
-        health = 95.5f,
-        isActive = true
-    };
-
-    PmPrefs.Save("test_object", testData);
-
-    // Load and verify
-    var loadedData = PmPrefs.Load<TestData>("test_object", null);
-    Debug.Assert(loadedData != null, "Complex object is null");
-    Debug.Assert(loadedData.playerName == "TestPlayer", "Complex object name mismatch");
-    Debug.Assert(loadedData.level == 10, "Complex object level mismatch");
-    Debug.Assert(Mathf.Approximately(loadedData.health, 95.5f), "Complex object health mismatch");
-    Debug.Assert(loadedData.isActive == true, "Complex object isActive mismatch");
-
-    Debug.Log("✓ Complex object test passed");
-
-    // Cleanup
-    PmPrefs.DeleteKey("test_object");
-}
-```
-
-**3. Edge Cases and Error Handling**
-
-Test boundary conditions:
-
-```csharp
-private void TestEdgeCases()
-{
-    // Empty string key (should handle gracefully)
-    try
-    {
-        PmPrefs.Save("", "value");
-        Debug.LogWarning("Empty key was accepted - verify this is intended behavior");
-    }
-    catch (System.Exception e)
-    {
-        Debug.Log("✓ Empty key rejected correctly: " + e.Message);
-    }
-
-    // Null value
-    PmPrefs.Save("null_test", (string)null);
-    string nullResult = PmPrefs.Load<string>("null_test", "default");
-    Debug.Log($"Null value result: {nullResult}");
-
-    // Very long strings
-    string longString = new string('A', 10000);
-    PmPrefs.Save("long_string", longString);
-    string loadedLong = PmPrefs.Load<string>("long_string", "");
-    Debug.Assert(loadedLong.Length == 10000, "Long string test failed");
-    Debug.Log("✓ Long string test passed");
-
-    // Special characters
-    string specialChars = "Test!@#$%^&*()[]{}|\\:;\"'<>,.?/";
-    PmPrefs.Save("special_chars", specialChars);
-    string loadedSpecial = PmPrefs.Load<string>("special_chars", "");
-    Debug.Assert(loadedSpecial == specialChars, "Special characters test failed");
-    Debug.Log("✓ Special characters test passed");
-
-    // Cleanup
-    PmPrefs.DeleteKey("null_test");
-    PmPrefs.DeleteKey("long_string");
-    PmPrefs.DeleteKey("special_chars");
-}
-```
+1. **Basic Save/Load**: Save and load strings, ints, floats, and bools
+2. **Complex Types**: Save and load custom `[Serializable]` objects
+3. **Default Values**: Verify `Load()` returns the default when a key doesn't exist
+4. **HasKey/DeleteKey**: Verify key existence checks and deletion work correctly
+5. **Edge Cases**: Test with empty strings, null values, long strings, and special characters
 
 #### Editor Window Testing
 
@@ -1232,92 +1090,11 @@ The PmPrefs Editor window must be tested manually for each UI feature:
 - [ ] Verify old key can no longer decrypt preferences
 - [ ] Verify new key successfully decrypts preferences
 
-#### Encryption Security Testing
+#### Encryption and Platform Testing
 
-**1. Encryption Verification**
-
-Manually verify that values are actually encrypted:
-
-```csharp
-// Save a value via PmPrefs
-PmPrefs.Save("test_encrypted", "MySensitiveData");
-
-// Read the raw PlayerPrefs value
-string rawValue = PlayerPrefs.GetString("PmPrefs__test_encrypted");
-
-Debug.Log("Raw encrypted value: " + rawValue);
-// Should output Base64-encoded encrypted string, NOT "MySensitiveData"
-
-Debug.Assert(!rawValue.Contains("MySensitiveData"),
-    "SECURITY ISSUE: Value is not encrypted!");
-```
-
-**2. Key Isolation Testing**
-
-Verify PmPrefs doesn't interfere with regular PlayerPrefs:
-
-```csharp
-// Create a regular PlayerPrefs entry
-PlayerPrefs.SetString("regular_key", "regular_value");
-
-// Create a PmPrefs entry
-PmPrefs.Save("pmprefs_key", "pmprefs_value");
-
-// Verify both exist independently
-string regular = PlayerPrefs.GetString("regular_key");
-string pmprefs = PmPrefs.Load<string>("pmprefs_key", "");
-
-Debug.Assert(regular == "regular_value", "PlayerPrefs interference detected");
-Debug.Assert(pmprefs == "pmprefs_value", "PmPrefs value corrupted");
-Debug.Log("✓ Key isolation test passed");
-```
-
-**3. Secure Key Change Testing**
-
-Verify that changing the secure key properly re-encrypts data:
-
-```csharp
-// Save data with original key
-PmPrefs.Save("test_reencrypt", "TestData");
-
-// Change the secure key (via editor or code)
-// Then verify data can still be loaded
-string reloaded = PmPrefs.Load<string>("test_reencrypt", "FAILED");
-
-Debug.Assert(reloaded == "TestData", "Re-encryption failed");
-Debug.Log("✓ Secure key change test passed");
-```
-
-#### Platform-Specific Testing
-
-PmPrefs uses platform-specific PlayerPrefs storage. Test on each platform:
-
-**Windows Testing**
-
-- [ ] Verify preferences save/load correctly
-- [ ] Check Registry Editor at: `HKEY_CURRENT_USER\Software\[Company]\[Product]`
-- [ ] Verify encrypted values are stored in registry
-- [ ] Test with Windows-specific paths and special characters
-
-**macOS Testing**
-
-- [ ] Verify preferences save/load correctly
-- [ ] Check plist file at: `~/Library/Preferences/com.[Company].[Product].plist`
-- [ ] Use `defaults read` command to inspect raw values
-- [ ] Verify encrypted values are stored correctly
-
-**Linux Testing**
-
-- [ ] Verify preferences save/load correctly
-- [ ] Check preference file at: `~/.config/unity3d/[Company]/[Product]/prefs`
-- [ ] Verify file permissions are correct
-- [ ] Test with Linux-specific path handling
-
-**WebGL Considerations**
-
-- [ ] Note that PmPrefs uses PlayerPrefs, which uses browser localStorage on WebGL
-- [ ] Test in multiple browsers (Chrome, Firefox, Safari)
-- [ ] Verify encrypted data works within localStorage size limits (usually 5-10MB)
+- Verify that saved values are actually encrypted in PlayerPrefs (not stored as plain text)
+- Verify PmPrefs keys don't interfere with regular PlayerPrefs entries
+- If possible, test on multiple platforms (Windows, macOS, Linux)
 
 ### Quality Checklist
 
@@ -1384,109 +1161,12 @@ Before submitting a pull request, verify ALL items in this checklist:
 
 ### Testing Across Unity Versions
 
-PmPrefs supports Unity 2018.1 and later. When making changes, consider compatibility:
+PmPrefs supports Unity 2018.1 and later. When making changes:
 
-#### Minimum Version Testing (Unity 2018.1)
-
-If you have access to Unity 2018.1:
-
-- [ ] Verify package compiles without errors
-- [ ] Test core API functionality
-- [ ] Note any deprecated API warnings
-
-**Common compatibility issues:**
-- UIElements API differs significantly between 2018-2019
-- Some `System` APIs may not be available in older .NET Standard 2.0
-- PlayerPrefs behavior is consistent, but storage locations may differ
-
-#### LTS Version Testing (Unity 2020.3 LTS)
-
-Recommended baseline for testing:
-
-- [ ] Full testing of all features
-- [ ] Editor window UI displays correctly
-- [ ] All UIElements features work properly
-- [ ] Performance is acceptable
-
-#### Latest Version Testing (Unity 2022.3+ / Unity 6000)
-
-Test with the latest LTS or stable version:
-
-- [ ] Verify no deprecation warnings
-- [ ] Test with latest UIElements improvements
-- [ ] Verify package manifest compatibility
-- [ ] Check for API changes or obsolete warnings
-
-#### Version-Specific Notes
-
-**Unity 2018.x - 2019.x:**
-- UIElements is less mature—test thoroughly
-- Limited UIElements debugging tools
-- May need IMGUI fallbacks for some features
-
-**Unity 2020.3 LTS:**
-- Stable UIElements implementation
-- Good baseline for testing
-- Widely used by production projects
-
-**Unity 2021.3 LTS and later:**
-- Mature UIElements with better debugging
-- Package Manager improvements
-- Better performance overall
-
-**Unity 6000:**
-- Latest Unity version with all modern features
-- Test to ensure forward compatibility
-- Note any new features that could improve PmPrefs
-
-#### Testing Strategy
-
-If you don't have access to multiple Unity versions:
-
-1. **Test on your current version thoroughly**
-2. **Note your Unity version in the PR description**
-3. **Document any version-specific code you added**
-4. **Use conditional compilation for version-specific features:**
-
-```csharp
-#if UNITY_2020_1_OR_NEWER
-    // Use newer API
-    var visualTree = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(path);
-#else
-    // Use older API for compatibility
-    var visualTree = (VisualTreeAsset)AssetDatabase.LoadAssetAtPath(path, typeof(VisualTreeAsset));
-#endif
-```
-
-#### Continuous Integration Note
-
-**Current Status**: PmPrefs does not have CI/CD pipelines set up.
-
-**Future Goal**: Automated testing across multiple Unity versions using Unity Test Framework.
-
-**How you can help**: If you have experience setting up Unity CI/CD pipelines (GitHub Actions, Unity Cloud Build, etc.), contributions to add automated testing would be greatly appreciated!
-
----
-
-**Testing Summary:**
-
-✅ **Before every commit:**
-- Run manual API tests
-- Test in editor window
-- Check for console errors
-- Verify encryption is working
-
-✅ **Before every PR:**
-- Complete full quality checklist
-- Test on your Unity version
-- Update documentation
-- Clean up debug code
-
-✅ **For major changes:**
-- Test across multiple Unity versions if possible
-- Test on multiple platforms if possible
-- Add examples to README
-- Update CHANGELOG
+- Test on your current Unity version thoroughly
+- Note your Unity version in the PR description
+- Use conditional compilation (`#if UNITY_2020_1_OR_NEWER`) for version-specific features
+- Recommended baseline: Unity 2020.3 LTS or newer
 
 ## Pull Request Process
 

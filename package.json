@@ -1,6 +1,6 @@
 {
   "name": "com.projectmakers.pmprefs",
-  "version": "2.2.2",
+  "version": "2.3.0",
   "displayName": "PmPrefs",
   "description": "Simple and secure PlayerPrefs wrapper with AES encryption. Save any serializable object with one line of code. Includes visual Editor for managing preferences.",
   "unity": "2018.1",

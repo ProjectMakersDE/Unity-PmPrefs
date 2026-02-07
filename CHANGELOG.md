@@ -5,6 +5,19 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2026-02-07
+
+### Removed
+- Removed test helper tools from the Editor menu (`PmPrefsTestHelper`, `PmPrefsBackwardCompatibilityTest`, `PmPrefsPerformanceTest`) — this is a library package, not a test project
+- Removed old German documentation files (`Dokumentation.docx`, `Dokumentation.pdf`) — superseded by the English README
+
+### Fixed
+- Fixed **Tools > ProjectMakers > PmPrefs** menu item not opening the editor window (test sub-menu items were overriding it)
+
+### Changed
+- Updated CONTRIBUTING.md project structure to reflect actual file layout
+- Simplified testing documentation in CONTRIBUTING.md
+
 ## [2.2.2] - 2026-02-07
 
 ### Fixed
@@ -17,7 +30,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Fixed
 - Resolved merge conflict markers in `PmPrefs.cs`, `PmPrefsEditorWindow.cs`, `PrefsKeyReader.cs`, and `.gitignore`
 - Removed orphaned `GetWindowsKeys.cs.meta` (source file was already deleted)
-- Added missing `.meta` files for `PrefsKeyReader.cs`, `PmPrefsPerformanceTest.cs`, and `PmPrefsTestHelper.cs`
+- Added missing `.meta` files for `PrefsKeyReader.cs` and editor scripts
 - Removed leftover `verification_report.txt` from project root
 
 ## [2.2.0] - 2026-02-05
