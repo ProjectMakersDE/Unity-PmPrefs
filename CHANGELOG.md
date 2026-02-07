@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ## [2.2.2] - 2026-02-07
 
 ### Fixed
-- Fixed `hasUnsavedChanges`, `SaveChanges()`, and `DiscardChanges()` overrides causing CS0506 on Unity versions older than 2020.1 by wrapping them in `#if UNITY_2020_1_OR_NEWER` preprocessor guards
+- Fixed `hasUnsavedChanges` override causing CS0506 compile error — property is not virtual in `EditorWindow`, now uses the protected setter instead
 - Removed duplicate `OnSearchFieldValueChanged` method causing CS0111 compile error
 - Fixed duplicate search field callback registration
 

@@ -151,22 +151,11 @@ namespace PM.Plugins
          Repaint();
       }
 
-      #if UNITY_2020_1_OR_NEWER
-      /// <summary>
-      /// Override hasUnsavedChanges to integrate with Unity's built-in save dialog.
-      /// This enables Unity to prompt the user before closing the window if there are unsaved changes.
-      /// </summary>
-      public override bool hasUnsavedChanges => HasUnsavedChanges();
-      #endif
-
       public void CreateGUI()
       {
          Initialize();
 
-         #if UNITY_2020_1_OR_NEWER
-         // Set the message shown when closing window with unsaved changes
          saveChangesMessage = "PmPrefs has unsaved changes. Do you want to save them?";
-         #endif
       }
 
       private void InitializeVisualElements()
@@ -673,12 +662,15 @@ namespace PM.Plugins
 
       private void UpdateUnsavedChangesIndicator()
       {
+         bool unsaved = HasUnsavedChanges();
+         hasUnsavedChanges = unsaved;
+
          if (_unsavedChangesLabel == null)
          {
             return;
          }
 
-         if (HasUnsavedChanges())
+         if (unsaved)
          {
             _unsavedChangesLabel.text = "Unsaved Changes";
             _unsavedChangesLabel.style.display = DisplayStyle.Flex;
@@ -901,7 +893,6 @@ namespace PM.Plugins
          RefreshLists();
       }
 
-      #if UNITY_2020_1_OR_NEWER
       /// <summary>
       /// Override SaveChanges to handle the "Save" option when closing the window with unsaved changes.
       /// Called by Unity when the user chooses to save before closing.
@@ -923,7 +914,6 @@ namespace PM.Plugins
          RefreshLists();
          base.DiscardChanges();
       }
-      #endif
 
       /// <summary>
       /// Finds the PmPrefs.cs file in either Packages or Assets folder.
