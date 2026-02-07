@@ -5,6 +5,22 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [2.4.0] - 2026-02-07
+
+### Added
+- `PmPrefs.SaveRaw()` method for saving raw string values with encryption, bypassing JsonUtility serialization
+- JSON validation on Create and Save — values must be syntactically valid JSON before they can be stored
+- Instant save on Create — new preferences are persisted to disk immediately
+
+### Fixed
+- Fixed Create panel producing empty/corrupted values because `JsonUtility.ToJson(string)` does not work with plain strings
+- Fixed PlayerPrefs tab showing raw/encoded data instead of actual values — now reads through the Unity PlayerPrefs API instead of parsing platform storage directly
+
+### Changed
+- Improved list layout: Key column now uses a fixed width for consistent row alignment
+- Redesigned list header with bold labels and proper column alignment (Key, Value, Delete)
+- Fixed ListView container alignment (`stretch` instead of `flex-end`) so list items fill the full width
+
 ## [2.3.0] - 2026-02-07
 
 ### Removed

@@ -596,8 +596,26 @@ namespace PM.Plugins
             return;
          }
 
-         PmPrefs.Save(key, value);
+         if (string.IsNullOrWhiteSpace(value))
+         {
+            EditorUtility.DisplayDialog("Invalid Value", "Please enter a value.", "OK");
+            return;
+         }
+
+         if (!IsValidJson(value))
+         {
+            EditorUtility.DisplayDialog("Invalid JSON",
+               "The value must be valid JSON.\n\nExamples:\n" +
+               "  {\"name\": \"John\", \"score\": 100}\n" +
+               "  {\"enabled\": true}\n" +
+               "  \"simple string\"", "OK");
+            return;
+         }
+
+         // Save raw value directly (bypassing JsonUtility.ToJson which corrupts plain strings)
+         PmPrefs.SaveRaw(key, value);
          PmPrefs.FlushKeyList();
+         PlayerPrefs.Save();
 
          _createNewKeyField.value = "";
          _createNewValueField.value = "";
@@ -686,6 +704,28 @@ namespace PM.Plugins
       {
          int savedCount = 0;
          int deletedCount = 0;
+
+         // Validate all changed PmPrefs values before saving (when showing decrypted)
+         if (ShowEncrypted)
+         {
+            var invalidKeys = new List<string>();
+            foreach (var pref in PmPrefsList)
+            {
+               if (pref.Changed && !pref.DeleteMarker && !IsValidJson(pref.Value))
+               {
+                  invalidKeys.Add(pref.Key);
+               }
+            }
+
+            if (invalidKeys.Count > 0)
+            {
+               string keys = string.Join(", ", invalidKeys);
+               EditorUtility.DisplayDialog("Invalid JSON",
+                  $"The following keys have invalid JSON values:\n\n{keys}\n\nPlease fix the values and try again.",
+                  "OK");
+               return;
+            }
+         }
 
          // Save PmPrefs changes
          for (var i = PmPrefsList.Count - 1; i >= 0; i--)
@@ -938,6 +978,49 @@ namespace PM.Plugins
 
          // Last resort: recursive search in Assets
          return FindFileRecursive("PmPrefs.cs", Application.dataPath);
+      }
+
+      /// <summary>
+      /// Validates whether a string is syntactically valid JSON.
+      /// Checks objects, arrays, strings, numbers, booleans, and null.
+      /// </summary>
+      private static bool IsValidJson(string text)
+      {
+         if (string.IsNullOrWhiteSpace(text)) return false;
+         text = text.Trim();
+         if (text.Length == 0) return false;
+
+         char first = text[0];
+         char last = text[text.Length - 1];
+
+         // JSON object or array: validate bracket balance
+         if ((first == '{' && last == '}') || (first == '[' && last == ']'))
+         {
+            int depth = 0;
+            bool inStr = false;
+            bool esc = false;
+            foreach (char c in text)
+            {
+               if (esc) { esc = false; continue; }
+               if (c == '\\' && inStr) { esc = true; continue; }
+               if (c == '"') { inStr = !inStr; continue; }
+               if (inStr) continue;
+               if (c == '{' || c == '[') depth++;
+               else if (c == '}' || c == ']') { depth--; if (depth < 0) return false; }
+            }
+            return depth == 0 && !inStr;
+         }
+
+         // JSON string
+         if (first == '"' && last == '"' && text.Length >= 2) return true;
+
+         // JSON primitives
+         if (text == "true" || text == "false" || text == "null") return true;
+
+         // JSON number
+         double d;
+         return double.TryParse(text, System.Globalization.NumberStyles.Any,
+            System.Globalization.CultureInfo.InvariantCulture, out d);
       }
 
       private string FindFileRecursive(string filename, string folder)

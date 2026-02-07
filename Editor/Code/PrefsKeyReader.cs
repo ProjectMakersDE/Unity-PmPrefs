@@ -76,8 +76,19 @@ namespace PM.Plugins
             }
             else
             {
-               // Regular PlayerPrefs key
-               _editorWindow.PlayerPrefsList.Add(new PmPrefsListItem(keyName, strValue));
+               // Regular PlayerPrefs key - read using Unity PlayerPrefs API for correct values.
+               // Platform readers (plist/registry) may return raw/encoded data that differs
+               // from the actual value. The PlayerPrefs API properly decodes the stored data.
+               string displayValue = strValue;
+               if (PlayerPrefs.HasKey(keyName))
+               {
+                  string apiValue = PlayerPrefs.GetString(keyName, "");
+                  if (!string.IsNullOrEmpty(apiValue))
+                  {
+                     displayValue = apiValue;
+                  }
+               }
+               _editorWindow.PlayerPrefsList.Add(new PmPrefsListItem(keyName, displayValue));
             }
          }
       }

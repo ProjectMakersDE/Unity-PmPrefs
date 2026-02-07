@@ -457,6 +457,19 @@ namespace PM.Plugins
       }
 
       /// <summary>
+      /// Saves a raw string value with encryption, bypassing JSON serialization.
+      /// The value is encrypted and stored directly without JsonUtility.ToJson wrapping.
+      /// </summary>
+      /// <param name="key">The key to save under.</param>
+      /// <param name="rawValue">The raw string value to encrypt and store.</param>
+      public static void SaveRaw(string key, string rawValue)
+      {
+         if (string.IsNullOrEmpty(key)) return;
+         AddKeyToList(key);
+         PlayerPrefs.SetString(Prefix + key, Encrypt(rawValue ?? ""));
+      }
+
+      /// <summary>
       /// Loads a value with a key that can be any type.
       /// </summary>
       /// <typeparam name="TK">The type of the key.</typeparam>
