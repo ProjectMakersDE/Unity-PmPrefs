@@ -5,6 +5,14 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [2.2.1] - 2026-02-07
+
+### Fixed
+- Resolved merge conflict markers committed in `PmPrefs.cs` (`AddKeyToList` and `RemoveKeyFromList`)
+- Removed orphaned `GetWindowsKeys.cs.meta` (source file was already deleted)
+- Added missing `.meta` files for `PrefsKeyReader.cs`, `PmPrefsPerformanceTest.cs`, and `PmPrefsTestHelper.cs`
+- Removed leftover `verification_report.txt` from project root
+
 ## [2.2.0] - 2026-02-05
 
 ### Added

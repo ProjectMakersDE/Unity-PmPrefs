@@ -181,43 +181,29 @@ namespace PM.Plugins
       /// Adds a key to the internal HashSet tracking system.
       /// HashSet.Add automatically prevents duplicates and returns false if the key already exists,
       /// eliminating the need for manual Contains checks (O(1) vs O(n) with List).
-      /// Only saves to PlayerPrefs if the key was actually added.
+      /// Marks the key list as dirty for batched saving via FlushKeyList().
       /// </summary>
       /// <param name="key">The key to add to the tracking system.</param>
       private static void AddKeyToList(string key)
       {
          if (string.IsNullOrEmpty(key)) return;
 
-<<<<<<< HEAD
-         if (List.Add(key))
-         {
-            SaveKeyList();
-         }
-=======
          List.Add(key);
          _isKeyListDirty = true;
->>>>>>> auto-claude/013-batch-savekeylist-calls-and-playerprefs-save-with-
       }
 
       /// <summary>
       /// Removes a key from the internal HashSet tracking system.
       /// HashSet.Remove provides O(1) performance compared to List.Remove which requires O(n) searching.
-      /// Only saves to PlayerPrefs if the key was actually removed.
+      /// Marks the key list as dirty for batched saving via FlushKeyList().
       /// </summary>
       /// <param name="key">The key to remove from the tracking system.</param>
       private static void RemoveKeyFromList(string key)
       {
          if (string.IsNullOrEmpty(key)) return;
 
-<<<<<<< HEAD
-         if (List.Remove(key))
-         {
-            SaveKeyList();
-         }
-=======
          List.Remove(key);
          _isKeyListDirty = true;
->>>>>>> auto-claude/013-batch-savekeylist-calls-and-playerprefs-save-with-
       }
 
       /// <summary>
