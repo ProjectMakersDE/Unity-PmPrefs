@@ -26,8 +26,9 @@
         <ui:VisualElement name="Name" style="flex-direction: row; min-width: auto; min-height: auto; justify-content: center; margin-top: 8px;">
             <ui:TextField picking-mode="Ignore" label="Name:" value="filler text" name="CreateName_tf" style="flex-grow: 0; margin-left: 0; margin-right: 0; margin-top: 0; margin-bottom: 0; min-width: 360px; max-width: 512px;" />
         </ui:VisualElement>
-        <ui:VisualElement name="Value" style="flex-direction: row; min-width: auto; min-height: auto; justify-content: center; margin-top: 4px; margin-bottom: 4px;">
-            <ui:TextField picking-mode="Ignore" label="Value:" value="filler text" name="CreateValue_tf" tooltip="Enter the Value as JSON." style="flex-grow: 0; margin-left: 0; margin-right: 0; margin-top: 0; margin-bottom: 0; min-width: 360px; max-width: 512px;" />
+        <ui:VisualElement name="Value" style="flex-direction: column; min-width: auto; min-height: auto; align-items: center; margin-top: 4px; margin-bottom: 4px;">
+            <ui:TextField picking-mode="Ignore" label="Value:" value="" name="CreateValue_tf" multiline="true" tooltip="Enter the Value as JSON." style="flex-grow: 0; margin-left: 0; margin-right: 0; margin-top: 0; margin-bottom: 0; min-width: 360px; max-width: 512px; min-height: 80px; white-space: normal;" />
+            <ui:Button text="Insert Default JSON" display-tooltip-when-elided="true" name="DefaultJson_btn" tooltip="Insert a default JSON template into the value field" style="min-width: 360px; max-width: 512px; margin-top: 4px;" />
         </ui:VisualElement>
         <ui:VisualElement name="Buttons" style="justify-content: center; align-items: stretch; flex-direction: row;">
             <ui:Button text="Create" display-tooltip-when-elided="true" name="Create_btn" style="min-width: 360px; max-width: 512px;" />

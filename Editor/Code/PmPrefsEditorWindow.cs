@@ -69,6 +69,7 @@ namespace PM.Plugins
 
       private Button _exportButton;
       private Button _importButton;
+      private Button _defaultJsonButton;
 
       private TextField _createNewKeyField;
       private TextField _createNewValueField;
@@ -191,6 +192,7 @@ namespace PM.Plugins
 
          _exportButton = _root.Q<Button>("Export_btn");
          _importButton = _root.Q<Button>("Import_btn");
+         _defaultJsonButton = _root.Q<Button>("DefaultJson_btn");
 
          _createNewContainer = _root.Q<VisualElement>("Create");
          _configurationContainer = _root.Q<VisualElement>("Configuration");
@@ -217,6 +219,7 @@ namespace PM.Plugins
          _createNewButton.clicked += OnCreateNewButtonClicked;
          _createButton.clicked += CreateNewPref;
          _changeSecureKeyButton.clicked += ChangeSecureKey;
+         _defaultJsonButton.clicked += OnDefaultJsonButtonClicked;
          _configurationButton.clicked += OnConfigurationButtonClicked;
          _refreshButton.clicked += OnRefreshButtonClicked;
          _showEncryptedButton.clicked += OnShowEncryptedButtonClicked;
@@ -569,6 +572,23 @@ namespace PM.Plugins
          _showPlayerPrefsButton.style.backgroundColor = new StyleColor(new Color(.15f, .15f, .15f));
          _listViewPlayerPrefsList.style.display = DisplayStyle.Flex;
          _showPmPrefsButton.style.backgroundColor = new StyleColor(new Color(.235f, .235f, .235f));
+      }
+
+      private void OnDefaultJsonButtonClicked()
+      {
+         const string defaultJson = "{\n  \"key\": \"value\"\n}";
+
+         if (!string.IsNullOrEmpty(_createNewValueField.value))
+         {
+            if (!EditorUtility.DisplayDialog("Replace Value",
+               "This will replace the current value with a default JSON template.\n\nContinue?",
+               "Replace", "Cancel"))
+            {
+               return;
+            }
+         }
+
+         _createNewValueField.value = defaultJson;
       }
 
       private void OnShowPmPrefsButtonClicked()
