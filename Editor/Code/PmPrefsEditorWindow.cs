@@ -89,9 +89,9 @@ namespace PM.Plugins
       private ExportFormat _selectedExportFormat = ExportFormat.CSV;
 
       /// <summary>
-      /// When true, shows decrypted values. When false, shows encrypted values.
+      /// When true, values are shown decrypted in the UI. When false, shows raw encrypted values.
       /// </summary>
-      public bool ShowEncrypted;
+      public bool ShowDecrypted;
 
       /// <summary>
       /// List of PlayerPrefs entries (non-PmPrefs).
@@ -222,7 +222,7 @@ namespace PM.Plugins
          _defaultJsonButton.clicked += OnDefaultJsonButtonClicked;
          _configurationButton.clicked += OnConfigurationButtonClicked;
          _refreshButton.clicked += OnRefreshButtonClicked;
-         _showEncryptedButton.clicked += OnShowEncryptedButtonClicked;
+         _showEncryptedButton.clicked += OnShowDecryptedButtonClicked;
          _showPmPrefsButton.clicked += OnShowPmPrefsButtonClicked;
          _showPlayerPrefsButton.clicked += OnShowPlayerPrefsButtonClicked;
          if (_searchField != null)
@@ -347,10 +347,10 @@ namespace PM.Plugins
          listView.RefreshItems();
       }
 
-      private void OnShowEncryptedButtonClicked()
+      private void OnShowDecryptedButtonClicked()
       {
-         ShowEncrypted = !ShowEncrypted;
-         _showEncryptedButton.style.backgroundColor = ShowEncrypted
+         ShowDecrypted = !ShowDecrypted;
+         _showEncryptedButton.style.backgroundColor = ShowDecrypted
             ? new StyleColor(new Color(.15f, .15f, .15f))
             : new StyleColor(new Color(.235f, .235f, .235f));
 
@@ -375,9 +375,9 @@ namespace PM.Plugins
 
          foreach (var item in PmPrefsList)
          {
-            // When ShowEncrypted is true, the value is already decrypted in the list
-            // When ShowEncrypted is false, we need to decrypt for export (export should be readable)
-            string value = ShowEncrypted ? item.Value : PmPrefs.Decrypt(PlayerPrefs.GetString(PmPrefs.Prefix + item.Key));
+            // When ShowDecrypted is true, the value is already decrypted in the list
+            // When ShowDecrypted is false, we need to decrypt for export (export should be readable)
+            string value = ShowDecrypted ? item.Value : PmPrefs.Decrypt(PlayerPrefs.GetString(PmPrefs.Prefix + item.Key));
             csv.AppendLine($"PmPrefs;{item.Key};{value}");
          }
 
@@ -395,9 +395,9 @@ namespace PM.Plugins
 
          foreach (var item in PmPrefsList)
          {
-            // When ShowEncrypted is true, the value is already decrypted in the list
-            // When ShowEncrypted is false, we need to decrypt for export (export should be readable)
-            string value = ShowEncrypted ? item.Value : PmPrefs.Decrypt(PlayerPrefs.GetString(PmPrefs.Prefix + item.Key));
+            // When ShowDecrypted is true, the value is already decrypted in the list
+            // When ShowDecrypted is false, we need to decrypt for export (export should be readable)
+            string value = ShowDecrypted ? item.Value : PmPrefs.Decrypt(PlayerPrefs.GetString(PmPrefs.Prefix + item.Key));
             exportData.pmPrefs.Add(new PreferenceItem { key = item.Key, value = value });
          }
 
@@ -451,8 +451,7 @@ namespace PM.Plugins
 
                if (type == "PmPrefs")
                {
-                  // Save through PmPrefs API (auto-encrypts)
-                  PmPrefs.Save(key, value);
+                  PmPrefs.SaveRaw(key, value);
                }
                else if (type == "PlayerPrefs")
                {
@@ -495,8 +494,7 @@ namespace PM.Plugins
             {
                if (string.IsNullOrEmpty(item.key)) continue;
 
-               // Save through PmPrefs API (auto-encrypts)
-               PmPrefs.Save(item.key, item.value ?? "");
+               PmPrefs.SaveRaw(item.key, item.value ?? "");
             }
          }
 
@@ -519,6 +517,7 @@ namespace PM.Plugins
             }
          }
 
+         PmPrefs.FlushKeyList();
          PlayerPrefs.Save();
          _prefsKeyReader.InvalidateCache();
          RefreshLists();
@@ -726,7 +725,7 @@ namespace PM.Plugins
          int deletedCount = 0;
 
          // Validate all changed PmPrefs values before saving (when showing decrypted)
-         if (ShowEncrypted)
+         if (ShowDecrypted)
          {
             var invalidKeys = new List<string>();
             foreach (var pref in PmPrefsList)
@@ -763,7 +762,7 @@ namespace PM.Plugins
             if (pref.Changed)
             {
                // If showing decrypted, value needs to be encrypted on save
-               if (ShowEncrypted)
+               if (ShowDecrypted)
                {
                   PlayerPrefs.SetString(PmPrefs.Prefix + pref.Key, PmPrefs.Encrypt(pref.Value));
                }

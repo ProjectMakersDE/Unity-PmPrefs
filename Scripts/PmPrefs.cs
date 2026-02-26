@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
+using System.Globalization;
 using System.Text;
 using UnityEngine;
 
@@ -45,29 +46,18 @@ namespace PM.Plugins
    public static class PmPrefs
    {
       /// <summary>
-      /// Wrapper class for JSON serialization of HashSet&lt;string&gt;.
-      /// Uses HashSet for O(1) key lookups, additions, and removals, providing better performance than List&lt;string&gt;
-      /// which would require O(n) operations for duplicate checking and removals.
-      /// Unity's JsonUtility doesn't support generic HashSet directly, so this wrapper enables serialization.
+      /// Wrapper class for JSON serialization of the key list.
+      /// Uses List&lt;string&gt; for serialization compatibility with Unity's JsonUtility.
+      /// A separate HashSet is maintained at runtime for O(1) lookups.
       /// </summary>
       [Serializable]
       private class StringListWrapper
-      {
-         public HashSet<string> items = new HashSet<string>();
-      }
-
-      /// <summary>
-      /// Legacy wrapper class for backward compatibility with old List&lt;string&gt; format.
-      /// Used only for migrating existing data to the new HashSet-based format.
-      /// The List format is deprecated due to O(n) performance for duplicate checking and removals.
-      /// </summary>
-      [Serializable]
-      private class LegacyStringListWrapper
       {
          public List<string> items = new List<string>();
       }
 
       private static StringListWrapper _listWrapper;
+      private static HashSet<string> _keySet;
       private static bool _isKeyListDirty;
 
       private const string SaltKey = "F1m5eJVO9ASPxGW7B3KP9t8iNd5Edpb48LAGNlWcLHeNkeH6PNYf3BCztZB7D3ch";
@@ -91,62 +81,30 @@ namespace PM.Plugins
       private static string _currentSecureKey;
 
       /// <summary>
-      /// Gets the internal HashSet used for tracking all PmPrefs keys.
-      /// Uses HashSet for O(1) performance on add, remove, and contains operations.
-      /// Automatically handles migration from legacy List&lt;string&gt; format to HashSet on first access.
+      /// Gets the runtime HashSet for O(1) key lookups.
+      /// Backed by a List&lt;string&gt; in StringListWrapper for JsonUtility serialization.
+      /// The HashSet is rebuilt from the serialized List on first access.
       /// </summary>
-      /// <remarks>
-      /// Performance benefits of HashSet over List:
-      /// - Add with duplicate check: O(1) vs O(n)
-      /// - Remove: O(1) vs O(n)
-      /// - Contains: O(1) vs O(n)
-      /// This significantly improves performance when managing large numbers of keys.
-      /// </remarks>
       private static HashSet<string> List
       {
          get
          {
-            if (_listWrapper == null)
+            if (_keySet == null)
             {
+               _listWrapper = null;
+
                if (PlayerPrefs.HasKey(KeyListKey))
                {
                   string json = PlayerPrefs.GetString(KeyListKey);
                   if (!string.IsNullOrEmpty(json))
                   {
-                     // Try loading as new format (HashSet)
                      try
                      {
                         _listWrapper = JsonUtility.FromJson<StringListWrapper>(json);
                      }
                      catch (Exception ex)
                      {
-                        Debug.LogWarning($"[PmPrefs] Failed to load key list as new format: {ex.Message}");
-                     }
-
-                     // If new format failed or resulted in empty items, try loading as legacy format (List)
-                     if (_listWrapper == null || _listWrapper.items == null || _listWrapper.items.Count == 0)
-                     {
-                        try
-                        {
-                           LegacyStringListWrapper legacyWrapper = JsonUtility.FromJson<LegacyStringListWrapper>(json);
-                           if (legacyWrapper != null && legacyWrapper.items != null && legacyWrapper.items.Count > 0)
-                           {
-                              // Convert legacy List to new HashSet format
-                              _listWrapper = new StringListWrapper();
-                              foreach (var item in legacyWrapper.items)
-                              {
-                                 _listWrapper.items.Add(item);
-                              }
-
-                              // Save in new format to complete migration
-                              SaveKeyList();
-                              Debug.Log("[PmPrefs] Migrated key list from legacy List format to HashSet format");
-                           }
-                        }
-                        catch (Exception ex)
-                        {
-                           Debug.LogWarning($"[PmPrefs] Failed to load key list as legacy format: {ex.Message}");
-                        }
+                        Debug.LogWarning($"[PmPrefs] Failed to load key list: {ex.Message}");
                      }
                   }
                }
@@ -155,9 +113,11 @@ namespace PM.Plugins
                {
                   _listWrapper = new StringListWrapper();
                }
+
+               _keySet = new HashSet<string>(_listWrapper.items);
             }
 
-            return _listWrapper.items;
+            return _keySet;
          }
       }
 
@@ -177,41 +137,29 @@ namespace PM.Plugins
          return _keyBytes;
       }
 
-      /// <summary>
-      /// Adds a key to the internal HashSet tracking system.
-      /// HashSet.Add automatically prevents duplicates and returns false if the key already exists,
-      /// eliminating the need for manual Contains checks (O(1) vs O(n) with List).
-      /// Marks the key list as dirty for batched saving via FlushKeyList().
-      /// </summary>
-      /// <param name="key">The key to add to the tracking system.</param>
       private static void AddKeyToList(string key)
       {
          if (string.IsNullOrEmpty(key)) return;
 
-         List.Add(key);
-         _isKeyListDirty = true;
+         if (List.Add(key))
+         {
+            _isKeyListDirty = true;
+         }
       }
 
-      /// <summary>
-      /// Removes a key from the internal HashSet tracking system.
-      /// HashSet.Remove provides O(1) performance compared to List.Remove which requires O(n) searching.
-      /// Marks the key list as dirty for batched saving via FlushKeyList().
-      /// </summary>
-      /// <param name="key">The key to remove from the tracking system.</param>
       private static void RemoveKeyFromList(string key)
       {
          if (string.IsNullOrEmpty(key)) return;
 
-         List.Remove(key);
-         _isKeyListDirty = true;
+         if (List.Remove(key))
+         {
+            _isKeyListDirty = true;
+         }
       }
 
-      /// <summary>
-      /// Serializes and saves the HashSet-based key list to PlayerPrefs.
-      /// The HashSet is wrapped in StringListWrapper for JSON serialization compatibility.
-      /// </summary>
       private static void SaveKeyList()
       {
+         _listWrapper.items = new List<string>(_keySet);
          string json = JsonUtility.ToJson(_listWrapper);
          PlayerPrefs.SetString(KeyListKey, json);
          _isKeyListDirty = false;
@@ -276,7 +224,7 @@ namespace PM.Plugins
          if (string.IsNullOrEmpty(plainText))
             return string.Empty;
 
-         var plainTextBytes = Encoding.UTF8.GetBytes(plainText.Trim());
+         var plainTextBytes = Encoding.UTF8.GetBytes(plainText);
 
          using (var aes = Aes.Create())
          {
@@ -340,6 +288,7 @@ namespace PM.Plugins
       {
          PlayerPrefs.DeleteAll();
          _listWrapper = new StringListWrapper();
+         _keySet = new HashSet<string>();
       }
 
       /// <summary>
@@ -360,6 +309,7 @@ namespace PM.Plugins
          }
          PlayerPrefs.DeleteKey(KeyListKey);
          _listWrapper = new StringListWrapper();
+         _keySet = new HashSet<string>();
       }
 
       /// <summary>
@@ -392,25 +342,13 @@ namespace PM.Plugins
       }
 
       /// <summary>
-      /// Saves all pending changes to disk.
+      /// Flushes the key list and saves all pending changes to disk.
       /// </summary>
-      /// <remarks>
-      /// <para><b>Note:</b></para>
-      /// <para>
-      /// This method calls PlayerPrefs.Save() to persist all PlayerPrefs data.
-      /// It does NOT automatically flush the PmPrefs key list - you should call FlushKeyList()
-      /// before SaveAll() to ensure the key list is included in the save operation.
-      /// </para>
-      /// </remarks>
-      /// <example>
-      /// <code>
-      /// // Proper save sequence
-      /// PmPrefs.Save("data", myData);
-      /// PmPrefs.FlushKeyList(); // Ensure key list is persisted
-      /// PmPrefs.SaveAll(); // Save all PlayerPrefs data
-      /// </code>
-      /// </example>
-      public static void SaveAll() => PlayerPrefs.Save();
+      public static void SaveAll()
+      {
+         FlushKeyList();
+         PlayerPrefs.Save();
+      }
 
       /// <summary>
       /// Gets all keys stored in PmPrefs.
@@ -431,27 +369,25 @@ namespace PM.Plugins
       }
 
       /// <summary>
-      /// Saves a value with the specified key. The value is serialized to JSON and encrypted.
+      /// Saves a value with the specified key. The value is encrypted and stored in PlayerPrefs.
+      /// Supports primitives (string, int, float, bool, etc.) and complex [Serializable] objects.
       /// </summary>
       /// <param name="key">The key to save under.</param>
-      /// <param name="value">The value to save (must be serializable by JsonUtility).</param>
-      /// <remarks>
-      /// <para><b>Performance Note:</b></para>
-      /// <para>
-      /// This method writes the encrypted value immediately to PlayerPrefs but batches the key list update.
-      /// The key list is only marked as dirty and will be written when FlushKeyList() or SaveAll() is called.
-      /// This design optimizes batch operations while ensuring data values are always saved.
-      /// </para>
-      /// <para>
-      /// For best performance during bulk operations, call FlushKeyList() once after all saves are complete
-      /// rather than relying on the automatic flush during SaveAll().
-      /// </para>
-      /// </remarks>
+      /// <param name="value">The value to save.</param>
       public static void Save(string key, object value)
       {
          if (string.IsNullOrEmpty(key)) return;
 
-         string str = JsonUtility.ToJson(value);
+         string str;
+         if (value == null)
+            str = "";
+         else if (value is string s)
+            str = s;
+         else if (value.GetType().IsPrimitive || value is decimal)
+            str = Convert.ToString(value, CultureInfo.InvariantCulture);
+         else
+            str = JsonUtility.ToJson(value);
+
          AddKeyToList(key);
          PlayerPrefs.SetString(Prefix + key, Encrypt(str));
       }
@@ -485,6 +421,7 @@ namespace PM.Plugins
 
       /// <summary>
       /// Loads a value from PmPrefs.
+      /// Supports primitives (string, int, float, bool, etc.) and complex [Serializable] objects.
       /// </summary>
       /// <typeparam name="T">The type of the value to load.</typeparam>
       /// <param name="key">The key to load.</param>
@@ -504,6 +441,46 @@ namespace PM.Plugins
             var decrypted = Decrypt(encryptedValue);
             if (string.IsNullOrEmpty(decrypted)) return defaultValue;
 
+            Type targetType = typeof(T);
+
+            if (targetType == typeof(string))
+               return (T)(object)decrypted;
+
+            if (targetType == typeof(int))
+            {
+               if (int.TryParse(decrypted, NumberStyles.Any, CultureInfo.InvariantCulture, out int result))
+                  return (T)(object)result;
+               return defaultValue;
+            }
+
+            if (targetType == typeof(float))
+            {
+               if (float.TryParse(decrypted, NumberStyles.Any, CultureInfo.InvariantCulture, out float result))
+                  return (T)(object)result;
+               return defaultValue;
+            }
+
+            if (targetType == typeof(bool))
+            {
+               if (bool.TryParse(decrypted, out bool result))
+                  return (T)(object)result;
+               return defaultValue;
+            }
+
+            if (targetType == typeof(double))
+            {
+               if (double.TryParse(decrypted, NumberStyles.Any, CultureInfo.InvariantCulture, out double result))
+                  return (T)(object)result;
+               return defaultValue;
+            }
+
+            if (targetType == typeof(long))
+            {
+               if (long.TryParse(decrypted, NumberStyles.Any, CultureInfo.InvariantCulture, out long result))
+                  return (T)(object)result;
+               return defaultValue;
+            }
+
             return JsonUtility.FromJson<T>(decrypted);
          }
          catch (Exception ex)
@@ -519,6 +496,7 @@ namespace PM.Plugins
       public static void RefreshKeyCache()
       {
          _listWrapper = null;
+         _keySet = null;
       }
    }
 }

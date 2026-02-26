@@ -60,15 +60,12 @@ namespace PM.Plugins
                // This is a PmPrefs key
                string cleanKey = keyName.Substring(PmPrefs.Prefix.Length);
 
-               if (_editorWindow.ShowEncrypted)
+               if (_editorWindow.ShowDecrypted)
                {
-                  // Show decrypted value
-                  string encrypted = PlayerPrefs.GetString(keyName);
-                  strValue = PmPrefs.Decrypt(encrypted);
+                  strValue = PmPrefs.Decrypt(PlayerPrefs.GetString(keyName));
                }
                else
                {
-                  // Show encrypted value
                   strValue = PlayerPrefs.GetString(keyName);
                }
 
