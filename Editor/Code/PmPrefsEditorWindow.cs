@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Globalization;
 using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEditor.UIElements;
@@ -456,9 +457,9 @@ namespace PM.Plugins
                else if (type == "PlayerPrefs")
                {
                   // Try to detect type and save appropriately
-                  if (int.TryParse(value, out int intVal))
+                  if (int.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out int intVal))
                      PlayerPrefs.SetInt(key, intVal);
-                  else if (float.TryParse(value, out float floatVal))
+                  else if (float.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out float floatVal))
                      PlayerPrefs.SetFloat(key, floatVal);
                   else
                      PlayerPrefs.SetString(key, value);
@@ -508,9 +509,9 @@ namespace PM.Plugins
                string value = item.value ?? "";
 
                // Try to detect type and save appropriately
-               if (int.TryParse(value, out int intVal))
+               if (int.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out int intVal))
                   PlayerPrefs.SetInt(item.key, intVal);
-               else if (float.TryParse(value, out float floatVal))
+               else if (float.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out float floatVal))
                   PlayerPrefs.SetFloat(item.key, floatVal);
                else
                   PlayerPrefs.SetString(item.key, value);
@@ -663,9 +664,10 @@ namespace PM.Plugins
 
          listView.bindItem = (item, index) =>
          {
-            if (index >= 0 && index < items.Count)
+            var source = (List<PmPrefsListItem>)listView.itemsSource;
+            if (index >= 0 && index < source.Count)
             {
-               ((PmPrefsListItemEntryController)item.userData).SetData(items[index]);
+               ((PmPrefsListItemEntryController)item.userData).SetData(source[index]);
             }
          };
 
@@ -792,9 +794,9 @@ namespace PM.Plugins
             if (pref.Changed)
             {
                // Detect type
-               if (int.TryParse(pref.Value, out int intVal))
+               if (int.TryParse(pref.Value, NumberStyles.Any, CultureInfo.InvariantCulture, out int intVal))
                   PlayerPrefs.SetInt(pref.Key, intVal);
-               else if (float.TryParse(pref.Value, out float floatVal))
+               else if (float.TryParse(pref.Value, NumberStyles.Any, CultureInfo.InvariantCulture, out float floatVal))
                   PlayerPrefs.SetFloat(pref.Key, floatVal);
                else
                   PlayerPrefs.SetString(pref.Key, pref.Value);

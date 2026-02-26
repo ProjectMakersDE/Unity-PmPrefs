@@ -497,6 +497,7 @@ namespace PM.Plugins
       {
          _listWrapper = null;
          _keySet = null;
+         _isKeyListDirty = false;
       }
    }
 }
