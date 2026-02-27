@@ -5,6 +5,14 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [2.4.2] - 2026-02-27
+
+### Fixed
+- Fixed 8 bugs causing PmPrefs variables to always be empty (JsonUtility primitive serialization, HashSet serialization, Encrypt short-circuit, import using Save instead of SaveRaw, missing FlushKeyList in JSON import, Encrypt trimming whitespace, SaveAll not flushing key list)
+- Fixed search filter not working correctly
+- Fixed locale parsing issue
+- Fixed NullReferenceException after cache reset
+
 ## [2.4.1] - 2026-02-08
 
 ### Added
