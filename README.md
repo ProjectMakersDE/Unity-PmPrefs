@@ -1,6 +1,6 @@
 # PmPrefs - Unity Editor Extension
 
-[![Unity](https://img.shields.io/badge/Unity-2018.1%2B-blue.svg)](https://unity.com/)
+[![Unity](https://img.shields.io/badge/Unity-2021.3%2B-blue.svg)](https://unity.com/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE.md)
 
 A simple and secure way to save and load data in Unity games. PmPrefs wraps Unity's PlayerPrefs with automatic AES encryption and provides a visual editor for managing preferences.
@@ -297,11 +297,21 @@ For complete details about Unity's JsonUtility serialization system, see the [of
 
 ## Security Note
 
-The encryption key is stored in the source code (`PmPrefs.cs`). For production use:
+By default PmPrefs uses a built-in fallback key. The active key is read at runtime from a
+`PmPrefsKeyAsset` config asset placed in any `Resources` folder; if none is configured, the
+built-in `DefaultSecureKey` is used. Each value is encrypted with AES-256-CBC using a **random IV
+per value**, so identical values do not produce identical ciphertext.
 
-1. **Change the default key**: Use the Configuration panel in the editor window, or manually edit `SecureKey` in `PmPrefs.cs`
-2. **Use a unique key per project**: Don't use the default key in released games
-3. **Understand the limitations**: This protects against casual inspection, not determined attackers with access to your compiled code
+For production use:
+
+1. **Change the default key**: Open **Tools > ProjectMakers > PmPrefs > Configuration > Secure Key**
+   and set a project-specific key. This writes the key into a config asset under
+   `Assets/PmPrefs/Resources/` (no source edit and no recompile required, and it works for
+   read-only Package Manager / git-URL installs).
+2. **Use a unique key per project**: Don't ship released games with the default key.
+3. **Understand the limitations**: The key is still derivable from the build. This protects against
+   casual inspection and tampering, **not** determined attackers with access to your compiled code.
+   Do not use PmPrefs for passwords, tokens, or other sensitive data (see the FAQ).
 
 ## Editor Window
 
@@ -339,10 +349,11 @@ Open via **Tools > ProjectMakers > PmPrefs**
    - Click **Configuration > Import from CSV** to restore your data
 
 2. **Temporarily revert the key:**
-   - If you changed the key and forgot to export, revert to the old key in `PmPrefs.cs`
-   - Export your data to CSV
+   - If you changed the key and forgot to export, set the old key again in the `PmPrefsKeyAsset`
+     config asset (or via Configuration > Secure Key)
+   - Export your data to CSV or JSON
    - Change back to the new key
-   - Import the CSV file
+   - Import the file
 
 3. **Clear and start fresh:**
    - If the old data isn't critical, use `PmPrefs.DeleteAllPmPrefs()` to clear all encrypted preferences
@@ -984,7 +995,7 @@ CloudSave.Upload("playerProgress", progress);
 
 ## Requirements
 
-- Unity 2018.1 or later (tested up to Unity 6000)
+- Unity 2021.3 (LTS) or later (tested up to Unity 6000) — the editor window uses UI Toolkit APIs (e.g. `ListView` dynamic-height virtualization) introduced in Unity 2021.2
 - .NET Standard 2.0 or later
 
 ## Support

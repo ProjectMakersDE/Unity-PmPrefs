@@ -1,12 +1,15 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Xml;
 using System.Xml.Linq;
 using UnityEditor;
 using UnityEngine;
+using Debug = UnityEngine.Debug;
 
 #if UNITY_EDITOR_WIN
 using Microsoft.Win32;
@@ -26,11 +29,17 @@ namespace PM.Plugins
       private DateTime _lastCacheTime;
       private static readonly TimeSpan CacheTimeout = TimeSpan.FromSeconds(2);
 
-      // Compiled Regex patterns for performance optimization
-      private static readonly Regex PlistKeyValuePattern = new Regex(@"""([^""]+)""\s*=>\s*(.+)", RegexOptions.Compiled);
-      private static readonly Regex AlphanumericOnlyPattern = new Regex(@"[^a-zA-Z0-9]", RegexOptions.Compiled);
-      private static readonly Regex LinuxPrefPattern = new Regex(@"<pref\s+name=""([^""]+)""[^>]*>([^<]*)</pref>", RegexOptions.Compiled);
-      private static readonly Regex LinuxKeyPattern = new Regex(@"<key\s+name=""([^""]+)""[^>]*value=""([^""]*)""", RegexOptions.Compiled);
+      /// <summary>
+      /// True when the most recent read could not enumerate the platform store and fell back to
+      /// the PmPrefs tracked-key list (which cannot see regular PlayerPrefs). The editor window
+      /// surfaces this so the user knows the list may be incomplete.
+      /// </summary>
+      public bool UsedFallback { get; private set; }
+
+#if UNITY_EDITOR_WIN
+      // Validates Unity's registry value-name suffix: "<keyName>_h<hash>".
+      private static readonly Regex WindowsSuffixPattern = new Regex(@"^(?<name>.+)_h\d+$", RegexOptions.Compiled);
+#endif
 
       public PrefsKeyReader(PmPrefsEditorWindow editorWindow)
       {
@@ -50,8 +59,17 @@ namespace PM.Plugins
             string keyName = kvp.Key;
             object value = kvp.Value;
 
-            // Skip the internal key list
-            if (keyName == "PmPrefs__KeyList") continue;
+            // Skip the internal key list.
+            if (keyName == PmPrefs.KeyListKey) continue;
+
+            // Skip the legacy registry slot only while it still holds the un-migrated key list
+            // (plaintext JSON starting with '{'). A real user key named "KeyList" stores encrypted
+            // data (never starting with '{'), so it is still shown.
+            if (keyName == PmPrefs.LegacyKeyListKey)
+            {
+               string raw = PlayerPrefs.GetString(keyName);
+               if (raw != null && raw.TrimStart().StartsWith("{")) continue;
+            }
 
             string strValue = ConvertValueToString(value);
 
@@ -114,6 +132,8 @@ namespace PM.Plugins
             return _cachedKeys;
          }
 
+         UsedFallback = false;
+
 #if UNITY_EDITOR_WIN
          _cachedKeys = GetKeysFromWindowsRegistry();
 #elif UNITY_EDITOR_OSX
@@ -121,6 +141,7 @@ namespace PM.Plugins
 #elif UNITY_EDITOR_LINUX
          _cachedKeys = GetKeysFromLinuxPrefs();
 #else
+         UsedFallback = true;
          _cachedKeys = GetKeysFromTrackedList();
 #endif
 
@@ -140,6 +161,16 @@ namespace PM.Plugins
          _cachedSortedKeys = null;
       }
 
+      private Dictionary<string, object> UseFallback(string reason)
+      {
+         if (!string.IsNullOrEmpty(reason))
+         {
+            Debug.LogWarning($"[PmPrefs] {reason} Falling back to the tracked PmPrefs key list; regular PlayerPrefs may not be shown.");
+         }
+         UsedFallback = true;
+         return GetKeysFromTrackedList();
+      }
+
 #if UNITY_EDITOR_WIN
       private Dictionary<string, object> GetKeysFromWindowsRegistry()
       {
@@ -154,11 +185,12 @@ namespace PM.Plugins
 
                foreach (var valueName in key.GetValueNames())
                {
-                  // Unity adds a suffix like "_h12345" to registry keys
-                  int lastUnderscore = valueName.LastIndexOf('_');
-                  if (lastUnderscore <= 0) continue;
+                  // Unity appends a suffix like "_h12345" to registry value names. Strip it only
+                  // when it matches that exact pattern; otherwise keep the raw name.
+                  var match = WindowsSuffixPattern.Match(valueName);
+                  string cleanName = match.Success ? match.Groups["name"].Value : valueName;
+                  if (string.IsNullOrEmpty(cleanName)) continue;
 
-                  string cleanName = valueName.Substring(0, lastUnderscore);
                   object value = key.GetValue(valueName);
 
                   // Avoid duplicates (same key with different hash suffixes)
@@ -171,8 +203,7 @@ namespace PM.Plugins
          }
          catch (Exception ex)
          {
-            Debug.LogWarning($"[PmPrefs] Failed to read Windows Registry: {ex.Message}");
-            return GetKeysFromTrackedList();
+            return UseFallback($"Failed to read Windows Registry: {ex.Message}.");
          }
 
          return result;
@@ -182,82 +213,163 @@ namespace PM.Plugins
 #if UNITY_EDITOR_OSX
       private Dictionary<string, object> GetKeysFromMacOSPlist()
       {
-         var result = new Dictionary<string, object>();
-
          try
          {
             // Unity stores prefs in ~/Library/Preferences/unity.[companyname].[productname].plist
-            string companyName = SanitizeForPlist(PlayerSettings.companyName);
-            string productName = SanitizeForPlist(PlayerSettings.productName);
+            // using the company/product names verbatim.
             string plistPath = Path.Combine(
                Environment.GetFolderPath(Environment.SpecialFolder.Personal),
-               $"Library/Preferences/unity.{companyName}.{productName}.plist"
+               "Library/Preferences",
+               $"unity.{PlayerSettings.companyName}.{PlayerSettings.productName}.plist"
             );
 
             if (!File.Exists(plistPath))
             {
-               Debug.Log($"[PmPrefs] Plist not found at: {plistPath}");
-               return GetKeysFromTrackedList();
+               return UseFallback($"macOS plist not found at: {plistPath}.");
             }
 
-            // Read plist XML directly (no process spawn)
-            string content = File.ReadAllText(plistPath);
-
-            // Detect binary plist format (starts with "bplist")
-            if (content.Length > 6 && content.Substring(0, 6) == "bplist")
+            string xml = ReadPlistAsXml(plistPath);
+            if (string.IsNullOrEmpty(xml))
             {
-               Debug.LogWarning("[PmPrefs] Binary plist format detected. XML format required for direct parsing. Using fallback method.");
-               return GetKeysFromTrackedList();
+               return UseFallback("Could not convert macOS plist to XML.");
             }
 
-            // Parse plist XML format: <key>name</key> followed by <string>value</string> (or <integer>, <real>, etc.)
-            // Match key-value pairs in the plist dict structure
-            var keyPattern = @"<key>([^<]+)</key>\s*<(string|integer|real)>([^<]*)</(string|integer|real)>";
-            var keyMatches = Regex.Matches(content, keyPattern);
-
-            foreach (Match match in keyMatches)
+            var parsed = ParsePlistXml(xml);
+            if (parsed == null)
             {
-               string key = match.Groups[1].Value;
-               string value = match.Groups[3].Value;
-               result[key] = value;
+               return UseFallback("Could not parse macOS plist XML.");
             }
 
-            // Also handle boolean values (<true/> and <false/>)
-            var boolPattern = @"<key>([^<]+)</key>\s*<(true|false)\s*/>";
-            var boolMatches = Regex.Matches(content, boolPattern);
+            return parsed;
+         }
+         catch (Exception ex)
+         {
+            return UseFallback($"Failed to read macOS plist: {ex.Message}.");
+         }
+      }
 
-            foreach (Match match in boolMatches)
+      /// <summary>
+      /// Reads a plist file as XML. Converts binary plists (the modern macOS default) via plutil.
+      /// </summary>
+      private string ReadPlistAsXml(string plistPath)
+      {
+         // Peek the magic bytes to decide whether conversion is needed.
+         bool isBinary = false;
+         try
+         {
+            using (var fs = File.OpenRead(plistPath))
             {
-               string key = match.Groups[1].Value;
-               string value = match.Groups[2].Value;
-               if (!result.ContainsKey(key))
-               {
-                  result[key] = value;
-               }
+               byte[] magic = new byte[6];
+               int read = fs.Read(magic, 0, magic.Length);
+               isBinary = read == 6 && Encoding.ASCII.GetString(magic) == "bplist";
+            }
+         }
+         catch { /* fall through to direct read */ }
+
+         if (!isBinary)
+         {
+            return File.ReadAllText(plistPath);
+         }
+
+         // Binary plist: convert to XML on stdout via plutil (available on all macOS).
+         try
+         {
+            var psi = new ProcessStartInfo
+            {
+               FileName = "/usr/bin/plutil",
+               Arguments = $"-convert xml1 -o - \"{plistPath}\"",
+               UseShellExecute = false,
+               RedirectStandardOutput = true,
+               RedirectStandardError = true,
+               CreateNoWindow = true
+            };
+
+            using (var process = Process.Start(psi))
+            {
+               if (process == null) return null;
+               string output = process.StandardOutput.ReadToEnd();
+               process.WaitForExit(5000);
+               return process.ExitCode == 0 ? output : null;
             }
          }
          catch (Exception ex)
          {
-            Debug.LogWarning($"[PmPrefs] Failed to read macOS plist: {ex.Message}");
-            return GetKeysFromTrackedList();
+            Debug.LogWarning($"[PmPrefs] plutil conversion failed: {ex.Message}");
+            return null;
          }
-
-         return result;
-      }
-
-      private string SanitizeForPlist(string input)
-      {
-         if (string.IsNullOrEmpty(input)) return "DefaultCompany";
-         // Unity replaces spaces and special chars
-         return AlphanumericOnlyPattern.Replace(input, "").ToLower();
       }
 #endif
+
+      /// <summary>
+      /// Parses XML while ignoring any DOCTYPE/DTD (Apple plists declare an external DTD that must
+      /// not be fetched, and DtdProcessing defaults to Prohibit on modern runtimes).
+      /// </summary>
+      private static XDocument LoadXmlIgnoringDtd(string xml)
+      {
+         var settings = new XmlReaderSettings
+         {
+            DtdProcessing = DtdProcessing.Ignore,
+            XmlResolver = null
+         };
+         using (var stringReader = new StringReader(xml))
+         using (var reader = XmlReader.Create(stringReader, settings))
+         {
+            return XDocument.Load(reader);
+         }
+      }
+
+      /// <summary>
+      /// Parses an Apple plist XML document's top-level &lt;dict&gt; into a key/value map.
+      /// Handles string/integer/real/true/false/date/data value elements and decodes XML entities.
+      /// </summary>
+      private static Dictionary<string, object> ParsePlistXml(string xml)
+      {
+         try
+         {
+            var doc = LoadXmlIgnoringDtd(xml);
+            var dict = doc.Root?.Element("dict");
+            var result = new Dictionary<string, object>();
+            if (dict == null) return result;
+
+            XElement pendingKey = null;
+            foreach (var el in dict.Elements())
+            {
+               if (el.Name.LocalName == "key")
+               {
+                  pendingKey = el;
+                  continue;
+               }
+
+               if (pendingKey == null) continue;
+
+               string key = pendingKey.Value; // entity-decoded by LINQ to XML
+               string value;
+               switch (el.Name.LocalName)
+               {
+                  case "true": value = "true"; break;
+                  case "false": value = "false"; break;
+                  default: value = el.Value; break;
+               }
+
+               if (!result.ContainsKey(key))
+               {
+                  result[key] = value;
+               }
+               pendingKey = null;
+            }
+
+            return result;
+         }
+         catch (Exception ex)
+         {
+            Debug.LogWarning($"[PmPrefs] Failed to parse plist XML: {ex.Message}");
+            return null;
+         }
+      }
 
 #if UNITY_EDITOR_LINUX
       private Dictionary<string, object> GetKeysFromLinuxPrefs()
       {
-         var result = new Dictionary<string, object>();
-
          try
          {
             // Unity stores prefs in ~/.config/unity3d/[CompanyName]/[ProductName]/prefs
@@ -271,42 +383,56 @@ namespace PM.Plugins
 
             if (!File.Exists(prefsPath))
             {
-               Debug.Log($"[PmPrefs] Linux prefs file not found at: {prefsPath}");
-               return GetKeysFromTrackedList();
+               return UseFallback($"Linux prefs file not found at: {prefsPath}.");
             }
 
-            // Linux prefs is an XML file
             string content = File.ReadAllText(prefsPath);
-            var keyMatches = LinuxPrefPattern.Matches(content);
-
-            foreach (Match match in keyMatches)
+            var parsed = ParseLinuxPrefs(content);
+            if (parsed == null)
             {
-               string key = match.Groups[1].Value;
-               string value = match.Groups[2].Value;
-               result[key] = value;
+               return UseFallback("Could not parse Linux prefs XML.");
             }
 
-            // Also check for unity.* keys format
-            var unityKeyMatches = LinuxKeyPattern.Matches(content);
-            foreach (Match match in unityKeyMatches)
-            {
-               string key = match.Groups[1].Value;
-               string value = match.Groups[2].Value;
-               if (!result.ContainsKey(key))
-               {
-                  result[key] = value;
-               }
-            }
+            return parsed;
          }
          catch (Exception ex)
          {
-            Debug.LogWarning($"[PmPrefs] Failed to read Linux prefs: {ex.Message}");
-            return GetKeysFromTrackedList();
+            return UseFallback($"Failed to read Linux prefs: {ex.Message}.");
          }
-
-         return result;
       }
 #endif
+
+      /// <summary>
+      /// Parses Unity's Linux prefs XML: a &lt;preferences&gt; root with
+      /// &lt;pref name="..." type="..."&gt;value&lt;/pref&gt; children. Uses XDocument so attribute
+      /// order and XML entities are handled correctly.
+      /// </summary>
+      private static Dictionary<string, object> ParseLinuxPrefs(string content)
+      {
+         try
+         {
+            var doc = LoadXmlIgnoringDtd(content);
+            var result = new Dictionary<string, object>();
+
+            foreach (var pref in doc.Descendants("pref"))
+            {
+               var nameAttr = pref.Attribute("name");
+               if (nameAttr == null) continue;
+               string name = nameAttr.Value;
+               if (!result.ContainsKey(name))
+               {
+                  result[name] = pref.Value;
+               }
+            }
+
+            return result;
+         }
+         catch (Exception ex)
+         {
+            Debug.LogWarning($"[PmPrefs] Failed to parse Linux prefs: {ex.Message}");
+            return null;
+         }
+      }
 
       /// <summary>
       /// Fallback method using PmPrefs tracked key list.

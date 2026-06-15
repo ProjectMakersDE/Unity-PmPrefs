@@ -20,8 +20,10 @@ namespace PM.Plugins
    /// improves performance during bulk operations by avoiding repeated disk writes.
    /// </para>
    /// <para>
-   /// Call FlushKeyList() after batch operations to ensure the key list is persisted.
-   /// The key list will also be saved automatically when PlayerPrefs.Save() or SaveAll() is called.
+   /// Call FlushKeyList() after batch operations to ensure the key list is persisted, or call
+   /// SaveAll() which flushes the key list and then persists PlayerPrefs. Note that Unity's own
+   /// <see cref="PlayerPrefs.Save"/> does NOT flush the PmPrefs key list (PmPrefs cannot hook into
+   /// it) - always use PmPrefs.SaveAll() / FlushKeyList() instead.
    /// </para>
    /// </remarks>
    /// <example>
@@ -39,8 +41,7 @@ namespace PM.Plugins
    /// {
    ///     PmPrefs.Save($"item_{i}", itemData[i]);
    /// }
-   /// PmPrefs.FlushKeyList(); // Persist key list after batch operation
-   /// PmPrefs.SaveAll(); // Persist all PlayerPrefs data
+   /// PmPrefs.SaveAll(); // Flush key list + persist all PlayerPrefs data
    /// </code>
    /// </example>
    public static class PmPrefs
@@ -61,24 +62,104 @@ namespace PM.Plugins
       private static bool _isKeyListDirty;
 
       private const string SaltKey = "F1m5eJVO9ASPxGW7B3KP9t8iNd5Edpb48LAGNlWcLHeNkeH6PNYf3BCztZB7D3ch";
-      private const string ViKey = "NiB3KP9VksfNf3Bi";
+
+      // IV used by the legacy (v1) on-disk format. Kept only to decrypt data written by
+      // older PmPrefs versions; new data uses a random per-value IV (see Encrypt).
+      private const string LegacyIv = "NiB3KP9VksfNf3Bi";
+
+      // Marker prefix that identifies the current (v2) encrypted format: random IV prepended
+      // to the ciphertext. ':' is not a Base64 character, so a legacy Base64 string can never
+      // be mistaken for v2.
+      private const string V2Prefix = "PMv2:";
+
+      // PBKDF2 iteration count for the v2 key. The legacy key uses the framework default (1000).
+      private const int V2Iterations = 100000;
 
       /// <summary>
-      /// The encryption key used for all PmPrefs data.
-      /// Change this to a unique value for your project for better security.
-      /// Must be at least 8 characters, alphanumeric only.
+      /// The built-in fallback encryption key, used when no <see cref="PmPrefsKeyAsset"/> with a
+      /// non-empty key is present. Prefer setting a project-specific key via the editor window
+      /// (Configuration &gt; Secure Key) instead of relying on this default.
       /// </summary>
-      public const string SecureKey = "LoKo1Nibu75XXzu";
+      public const string DefaultSecureKey = "LoKo1Nibu75XXzu";
 
-      private const string KeyListKey = "PmPrefs__KeyList";
+      private static string _activeKey;
+      private static bool _activeKeyResolved;
+
+      /// <summary>
+      /// The encryption key currently in effect. Resolved from a <see cref="PmPrefsKeyAsset"/> in
+      /// any Resources folder; falls back to <see cref="DefaultSecureKey"/> when none is configured.
+      /// Call <see cref="RefreshSecureKey"/> after changing the configured key.
+      /// </summary>
+      public static string SecureKey
+      {
+         get
+         {
+            if (!_activeKeyResolved)
+            {
+               _activeKey = ResolveSecureKey();
+               _activeKeyResolved = true;
+            }
+            return _activeKey;
+         }
+      }
+
+      private static string ResolveSecureKey()
+      {
+         try
+         {
+            var configs = Resources.LoadAll<PmPrefsKeyAsset>("");
+            if (configs != null)
+            {
+               foreach (var config in configs)
+               {
+                  if (config != null && !string.IsNullOrEmpty(config.secureKey))
+                  {
+                     return config.secureKey;
+                  }
+               }
+            }
+         }
+         catch (Exception ex)
+         {
+            Debug.LogWarning($"[PmPrefs] Failed to resolve secure key from config asset: {ex.Message}");
+         }
+
+         return DefaultSecureKey;
+      }
+
+      /// <summary>
+      /// Forces the active <see cref="SecureKey"/> and derived key material to be re-resolved on
+      /// next use. Call this after editing the configured key (e.g. from the editor window).
+      /// </summary>
+      public static void RefreshSecureKey()
+      {
+         _activeKeyResolved = false;
+         _activeKey = null;
+         _keyBytes = null;
+         _keyBytesLegacy = null;
+         _currentKeyForBytes = null;
+      }
+
+      /// <summary>
+      /// The key under which the internal key list is stored. Chosen so it can never collide with
+      /// any user key (a user key would be stored under <see cref="Prefix"/> + key).
+      /// </summary>
+      public const string KeyListKey = "PmPrefsMeta_KeyList";
+
+      /// <summary>
+      /// The registry slot used by older versions, which collided with a user key named "KeyList".
+      /// Read once for migration, then removed. Exposed so the editor reader can recognize it.
+      /// </summary>
+      public const string LegacyKeyListKey = "PmPrefs__KeyList";
 
       /// <summary>
       /// Prefix added to all PmPrefs keys to distinguish from regular PlayerPrefs.
       /// </summary>
       public const string Prefix = "PmPrefs__";
 
-      private static byte[] _keyBytes;
-      private static string _currentSecureKey;
+      private static byte[] _keyBytes;        // v2 key (high iteration count)
+      private static byte[] _keyBytesLegacy;  // v1 key (framework default iterations)
+      private static string _currentKeyForBytes;
 
       /// <summary>
       /// Gets the runtime HashSet for O(1) key lookups.
@@ -93,25 +174,49 @@ namespace PM.Plugins
             {
                _listWrapper = null;
 
+               string json = null;
+
                if (PlayerPrefs.HasKey(KeyListKey))
                {
-                  string json = PlayerPrefs.GetString(KeyListKey);
-                  if (!string.IsNullOrEmpty(json))
+                  json = PlayerPrefs.GetString(KeyListKey);
+               }
+               else if (PlayerPrefs.HasKey(LegacyKeyListKey))
+               {
+                  // Migrate the registry from the old (collision-prone) slot, but only if it
+                  // actually parses as a key list. If it does not, the old slot likely holds a
+                  // user value for a key named "KeyList" - leave it untouched.
+                  string legacy = PlayerPrefs.GetString(LegacyKeyListKey);
+                  StringListWrapper parsed = null;
+                  try { parsed = JsonUtility.FromJson<StringListWrapper>(legacy); }
+                  catch { parsed = null; }
+
+                  if (parsed != null && parsed.items != null)
                   {
-                     try
-                     {
-                        _listWrapper = JsonUtility.FromJson<StringListWrapper>(json);
-                     }
-                     catch (Exception ex)
-                     {
-                        Debug.LogWarning($"[PmPrefs] Failed to load key list: {ex.Message}");
-                     }
+                     json = legacy;
+                     PlayerPrefs.SetString(KeyListKey, legacy);
+                     PlayerPrefs.DeleteKey(LegacyKeyListKey);
+                  }
+               }
+
+               if (!string.IsNullOrEmpty(json))
+               {
+                  try
+                  {
+                     _listWrapper = JsonUtility.FromJson<StringListWrapper>(json);
+                  }
+                  catch (Exception ex)
+                  {
+                     Debug.LogWarning($"[PmPrefs] Failed to load key list: {ex.Message}");
                   }
                }
 
                if (_listWrapper == null)
                {
                   _listWrapper = new StringListWrapper();
+               }
+               if (_listWrapper.items == null)
+               {
+                  _listWrapper.items = new List<string>();
                }
 
                _keySet = new HashSet<string>(_listWrapper.items);
@@ -122,19 +227,38 @@ namespace PM.Plugins
       }
 
       /// <summary>
-      /// Ensures the key derivation bytes are initialized with the current SecureKey.
+      /// Ensures the derived key bytes are initialized for the active <see cref="SecureKey"/>.
+      /// Derives both the current (v2) key and the legacy key (needed to read old data).
       /// </summary>
       private static byte[] GetKeyBytes()
       {
-         if (_keyBytes == null || _currentSecureKey != SecureKey)
+         string key = SecureKey;
+         if (_keyBytes == null || _currentKeyForBytes != key)
          {
-            using (var derive = new Rfc2898DeriveBytes(SecureKey, Encoding.ASCII.GetBytes(SaltKey)))
+            byte[] saltBytes = Encoding.UTF8.GetBytes(SaltKey);
+
+            // v2 key: stronger iteration count.
+            using (var derive = new Rfc2898DeriveBytes(key, saltBytes, V2Iterations))
             {
                _keyBytes = derive.GetBytes(32);
             }
-            _currentSecureKey = SecureKey;
+
+            // Legacy key: must match the original derivation (ASCII salt, framework default
+            // iteration count) so data written by older versions still decrypts.
+            using (var deriveLegacy = new Rfc2898DeriveBytes(key, Encoding.ASCII.GetBytes(SaltKey)))
+            {
+               _keyBytesLegacy = deriveLegacy.GetBytes(32);
+            }
+
+            _currentKeyForBytes = key;
          }
          return _keyBytes;
+      }
+
+      private static byte[] GetLegacyKeyBytes()
+      {
+         GetKeyBytes(); // ensures both keys are derived
+         return _keyBytesLegacy;
       }
 
       private static void AddKeyToList(string key)
@@ -181,31 +305,12 @@ namespace PM.Plugins
       /// <para>
       /// This method is very lightweight - it only writes to disk if changes have been made.
       /// Each call checks a dirty flag and skips the write operation if nothing has changed.
-      /// There is no performance penalty for calling this method when no changes are pending.
       /// </para>
       /// <para>
-      /// The key list is automatically flushed when SaveAll() or PlayerPrefs.Save() is called,
-      /// so you don't need to call this explicitly before those methods.
+      /// The key list is flushed automatically by <see cref="SaveAll"/>. Unity's own
+      /// <see cref="PlayerPrefs.Save"/> does NOT flush it, so prefer SaveAll() / FlushKeyList().
       /// </para>
       /// </remarks>
-      /// <example>
-      /// <code>
-      /// // Good: Batch operations with single flush
-      /// for (int i = 0; i &lt; 1000; i++)
-      /// {
-      ///     PmPrefs.Save($"level_{i}", levelData[i]);
-      /// }
-      /// PmPrefs.FlushKeyList(); // Single write of key list
-      /// PmPrefs.SaveAll(); // Persist all data
-      ///
-      /// // Avoid: Flushing inside loops (unnecessary performance cost)
-      /// for (int i = 0; i &lt; 1000; i++)
-      /// {
-      ///     PmPrefs.Save($"level_{i}", levelData[i]);
-      ///     PmPrefs.FlushKeyList(); // Don't do this - 1000 writes!
-      /// }
-      /// </code>
-      /// </example>
       public static void FlushKeyList()
       {
          if (_isKeyListDirty)
@@ -215,14 +320,13 @@ namespace PM.Plugins
       }
 
       /// <summary>
-      /// Encrypts the given plain text using AES encryption.
+      /// Encrypts the given plain text using AES-256-CBC with a random IV.
       /// </summary>
-      /// <param name="plainText">The text to encrypt.</param>
-      /// <returns>Base64 encoded encrypted string, or empty string if input is null/empty.</returns>
+      /// <param name="plainText">The text to encrypt. Null is treated as an empty string.</param>
+      /// <returns>An encrypted, format-tagged Base64 string. Empty input produces a valid (non-empty) ciphertext.</returns>
       public static string Encrypt(string plainText)
       {
-         if (string.IsNullOrEmpty(plainText))
-            return string.Empty;
+         plainText = plainText ?? string.Empty;
 
          var plainTextBytes = Encoding.UTF8.GetBytes(plainText);
 
@@ -231,7 +335,8 @@ namespace PM.Plugins
             aes.Mode = CipherMode.CBC;
             aes.Padding = PaddingMode.PKCS7;
             aes.Key = GetKeyBytes();
-            aes.IV = Encoding.ASCII.GetBytes(ViKey);
+            aes.GenerateIV();
+            byte[] iv = aes.IV;
 
             using (var memoryStream = new MemoryStream())
             using (var encryptor = aes.CreateEncryptor())
@@ -239,45 +344,88 @@ namespace PM.Plugins
             {
                cryptoStream.Write(plainTextBytes, 0, plainTextBytes.Length);
                cryptoStream.FlushFinalBlock();
-               return Convert.ToBase64String(memoryStream.ToArray());
+
+               byte[] cipher = memoryStream.ToArray();
+               byte[] combined = new byte[iv.Length + cipher.Length];
+               Buffer.BlockCopy(iv, 0, combined, 0, iv.Length);
+               Buffer.BlockCopy(cipher, 0, combined, iv.Length, cipher.Length);
+
+               return V2Prefix + Convert.ToBase64String(combined);
             }
          }
       }
 
       /// <summary>
-      /// Decrypts the given encrypted text.
+      /// Decrypts the given encrypted text. Supports both the current (v2) format and the legacy
+      /// fixed-IV format written by older versions.
       /// </summary>
-      /// <param name="encryptedText">Base64 encoded encrypted string.</param>
-      /// <returns>Decrypted plain text, or empty string if input is invalid.</returns>
+      /// <param name="encryptedText">Encrypted string produced by <see cref="Encrypt"/>.</param>
+      /// <returns>Decrypted plain text, or empty string if input is invalid or decryption fails.</returns>
       public static string Decrypt(string encryptedText)
       {
+         return TryDecrypt(encryptedText, out string result) ? result : string.Empty;
+      }
+
+      /// <summary>
+      /// Attempts to decrypt the given text, distinguishing a genuinely-empty stored value
+      /// (returns true, result == "") from a decryption failure (returns false).
+      /// </summary>
+      internal static bool TryDecrypt(string encryptedText, out string result)
+      {
+         result = string.Empty;
+
          if (string.IsNullOrEmpty(encryptedText))
-            return string.Empty;
+            return false;
 
          try
          {
-            var cipherTextBytes = Convert.FromBase64String(encryptedText);
+            bool isV2 = encryptedText.StartsWith(V2Prefix, StringComparison.Ordinal);
+            string base64 = isV2 ? encryptedText.Substring(V2Prefix.Length) : encryptedText;
+
+            byte[] data = Convert.FromBase64String(base64);
+
+            byte[] iv;
+            byte[] cipher;
+            byte[] key;
+
+            if (isV2)
+            {
+               if (data.Length < 16) return false;
+               iv = new byte[16];
+               Buffer.BlockCopy(data, 0, iv, 0, 16);
+               cipher = new byte[data.Length - 16];
+               Buffer.BlockCopy(data, 16, cipher, 0, cipher.Length);
+               key = GetKeyBytes();
+            }
+            else
+            {
+               iv = Encoding.ASCII.GetBytes(LegacyIv);
+               cipher = data;
+               key = GetLegacyKeyBytes();
+            }
 
             using (var aes = Aes.Create())
             {
                aes.Mode = CipherMode.CBC;
                aes.Padding = PaddingMode.PKCS7;
-               aes.Key = GetKeyBytes();
-               aes.IV = Encoding.ASCII.GetBytes(ViKey);
+               aes.Key = key;
+               aes.IV = iv;
 
-               using (var memoryStream = new MemoryStream(cipherTextBytes))
+               using (var memoryStream = new MemoryStream(cipher))
                using (var decryptor = aes.CreateDecryptor())
                using (var cryptoStream = new CryptoStream(memoryStream, decryptor, CryptoStreamMode.Read))
                using (var reader = new StreamReader(cryptoStream, Encoding.UTF8))
                {
-                  return reader.ReadToEnd();
+                  result = reader.ReadToEnd();
+                  return true;
                }
             }
          }
          catch (Exception ex)
          {
             Debug.LogWarning($"[PmPrefs] Decryption failed: {ex.Message}");
-            return string.Empty;
+            result = string.Empty;
+            return false;
          }
       }
 
@@ -289,17 +437,15 @@ namespace PM.Plugins
          PlayerPrefs.DeleteAll();
          _listWrapper = new StringListWrapper();
          _keySet = new HashSet<string>();
+         _isKeyListDirty = false;
       }
 
       /// <summary>
       /// Deletes only PmPrefs entries, leaving regular PlayerPrefs intact.
       /// </summary>
       /// <remarks>
-      /// <para><b>Performance Note:</b></para>
-      /// <para>
       /// This method immediately clears the key list and deletes all PmPrefs entries.
       /// No call to FlushKeyList() is needed as the key list is reset directly.
-      /// </para>
       /// </remarks>
       public static void DeleteAllPmPrefs()
       {
@@ -308,8 +454,10 @@ namespace PM.Plugins
             PlayerPrefs.DeleteKey(Prefix + key);
          }
          PlayerPrefs.DeleteKey(KeyListKey);
+         PlayerPrefs.DeleteKey(LegacyKeyListKey);
          _listWrapper = new StringListWrapper();
          _keySet = new HashSet<string>();
+         _isKeyListDirty = false;
       }
 
       /// <summary>
@@ -328,11 +476,8 @@ namespace PM.Plugins
       /// </summary>
       /// <param name="key">The key to delete.</param>
       /// <remarks>
-      /// <para><b>Performance Note:</b></para>
-      /// <para>
       /// This method deletes the key immediately from PlayerPrefs but batches the key list update.
-      /// Call FlushKeyList() after bulk delete operations to persist the updated key list.
-      /// </para>
+      /// Call FlushKeyList() (or SaveAll()) after bulk delete operations to persist the updated key list.
       /// </remarks>
       public static void DeleteKey(string key)
       {
@@ -370,7 +515,8 @@ namespace PM.Plugins
 
       /// <summary>
       /// Saves a value with the specified key. The value is encrypted and stored in PlayerPrefs.
-      /// Supports primitives (string, int, float, bool, etc.) and complex [Serializable] objects.
+      /// Supports primitives (string, int, float, bool, etc.), enums, decimals and complex
+      /// [Serializable] objects.
       /// </summary>
       /// <param name="key">The key to save under.</param>
       /// <param name="value">The value to save.</param>
@@ -383,6 +529,8 @@ namespace PM.Plugins
             str = "";
          else if (value is string s)
             str = s;
+         else if (value is Enum)
+            str = value.ToString();
          else if (value.GetType().IsPrimitive || value is decimal)
             str = Convert.ToString(value, CultureInfo.InvariantCulture);
          else
@@ -421,7 +569,8 @@ namespace PM.Plugins
 
       /// <summary>
       /// Loads a value from PmPrefs.
-      /// Supports primitives (string, int, float, bool, etc.) and complex [Serializable] objects.
+      /// Supports primitives (string, int, float, bool, etc.), enums, decimals and complex
+      /// [Serializable] objects.
       /// </summary>
       /// <typeparam name="T">The type of the value to load.</typeparam>
       /// <param name="key">The key to load.</param>
@@ -436,15 +585,17 @@ namespace PM.Plugins
          try
          {
             var encryptedValue = PlayerPrefs.GetString(Prefix + key);
-            if (string.IsNullOrEmpty(encryptedValue)) return defaultValue;
-
-            var decrypted = Decrypt(encryptedValue);
-            if (string.IsNullOrEmpty(decrypted)) return defaultValue;
+            if (!TryDecrypt(encryptedValue, out string decrypted)) return defaultValue;
 
             Type targetType = typeof(T);
 
+            // A successfully decrypted (possibly empty) string round-trips verbatim.
             if (targetType == typeof(string))
                return (T)(object)decrypted;
+
+            // Non-string targets cannot be parsed from an empty string.
+            if (string.IsNullOrEmpty(decrypted))
+               return defaultValue;
 
             if (targetType == typeof(int))
             {
@@ -479,6 +630,19 @@ namespace PM.Plugins
                if (long.TryParse(decrypted, NumberStyles.Any, CultureInfo.InvariantCulture, out long result))
                   return (T)(object)result;
                return defaultValue;
+            }
+
+            if (targetType.IsEnum)
+            {
+               try { return (T)Enum.Parse(targetType, decrypted); }
+               catch { return defaultValue; }
+            }
+
+            // Remaining primitives (byte, sbyte, short, ushort, uint, ulong, char) and decimal.
+            if (targetType.IsPrimitive || targetType == typeof(decimal))
+            {
+               try { return (T)Convert.ChangeType(decrypted, targetType, CultureInfo.InvariantCulture); }
+               catch { return defaultValue; }
             }
 
             return JsonUtility.FromJson<T>(decrypted);

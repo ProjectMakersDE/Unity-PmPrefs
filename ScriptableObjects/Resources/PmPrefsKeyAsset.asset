@@ -11,14 +11,5 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: d75c2f83d6444ccc82c19858efb322f6, type: 3}
   m_Name: PmPrefsKeyAsset
-  m_EditorClassIdentifier: 
-  Items:
-  - DeleteMarker: 0
-    Key: TestKey
-    Value: TestValue
-  - DeleteMarker: 0
-    Key: TestKey2
-    Value: TestValue2
-  - DeleteMarker: 0
-    Key: 
-    Value: Hier steht was! 123
+  m_EditorClassIdentifier:
+  secureKey:

@@ -25,7 +25,7 @@ namespace PM.Plugins
       private static readonly Color ChangedBorderColor = new Color(0.35f, 0.61f, 0.3f);
       private static readonly Color DeleteBorderColor = new Color(0.6f, 0.27f, 0.27f);
       private static readonly Color TransparentColor = new Color(0, 0, 0, 0);
-      private static readonly Color CopyFeedbackColor = new Color(0.4f, 0.8f, 0.4f, 0.3f);
+      private static readonly Color CopyFeedbackColor = new Color(0.4f, 0.8f, 0.4f, 0.6f);
 
       /// <summary>
       /// Sets up the visual element references for this controller.
@@ -80,6 +80,19 @@ namespace PM.Plugins
       }
 
       /// <summary>
+      /// Controls whether the value field can be edited. The encrypted view is read-only so the
+      /// raw ciphertext cannot be hand-edited into corrupted data.
+      /// </summary>
+      /// <param name="editable">True to allow editing, false for read-only.</param>
+      public void SetValueEditable(bool editable)
+      {
+         if (_valueField != null)
+         {
+            _valueField.isReadOnly = !editable;
+         }
+      }
+
+      /// <summary>
       /// Binds data to this list item controller.
       /// </summary>
       /// <param name="data">The preference data to display.</param>
@@ -108,6 +121,7 @@ namespace PM.Plugins
 
          // Set initial values
          _keyLabel.text = _data.Key;
+         _keyLabel.tooltip = _data.Key; // full key is hoverable even when truncated
          _valueField.SetValueWithoutNotify(_data.Value);
          _deleteToggle.SetValueWithoutNotify(_data.DeleteMarker);
 
@@ -123,9 +137,6 @@ namespace PM.Plugins
          {
             ApplyBorderStyle(ChangedBorderColor);
          }
-
-         // Update height based on content
-         UpdateHeight();
 
          // Register callbacks
          _valueField.RegisterValueChangedCallback(OnValueChanged);
@@ -169,23 +180,12 @@ namespace PM.Plugins
          _data.Value = evt.newValue;
          _isChanged = true;
 
-         UpdateHeight();
-
          if (!_data.DeleteMarker)
          {
             ApplyBorderStyle(ChangedBorderColor);
          }
 
          _onValueChangedCallback?.Invoke();
-      }
-
-      private void UpdateHeight()
-      {
-         if (_valueField.resolvedStyle.height > 0)
-         {
-            _root.style.height = _valueField.resolvedStyle.height + 10;
-         }
-         _root.MarkDirtyRepaint();
       }
 
       private void ApplyBorderStyle(Color color)
@@ -238,20 +238,13 @@ namespace PM.Plugins
       {
          if (button == null) return;
 
-         // Store original color
-         var originalColor = button.style.backgroundColor.value;
-
-         // Apply feedback color
+         // Flash a green background, then clear the inline override (restoring the theme background)
+         // after a short, real delay.
          button.style.backgroundColor = CopyFeedbackColor;
-
-         // Reset after brief delay (300ms)
-         EditorApplication.delayCall += () =>
+         button.schedule.Execute(() =>
          {
-            if (button != null)
-            {
-               button.style.backgroundColor = originalColor;
-            }
-         };
+            button.style.backgroundColor = StyleKeyword.Null;
+         }).StartingIn(400);
       }
    }
 }

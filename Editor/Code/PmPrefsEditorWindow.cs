@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Text;
 using System.Globalization;
 using System.Text.RegularExpressions;
@@ -44,7 +43,12 @@ namespace PM.Plugins
 
       // Cached compiled Regex patterns for performance
       private static readonly Regex AlphanumericValidationPattern = new Regex(@"^[a-zA-Z0-9]+$", RegexOptions.Compiled);
-      private static readonly Regex QuotedStringPattern = new Regex(@"""([^""]*)""", RegexOptions.Compiled);
+      private static readonly Regex IntegerPattern = new Regex(@"^-?(0|[1-9]\d*)$", RegexOptions.Compiled);
+      private static readonly Regex FloatPattern = new Regex(@"^-?(0|[1-9]\d*)(\.\d+)?([eE][+-]?\d+)?$", RegexOptions.Compiled);
+
+      // Shared toolbar selection colors
+      private static readonly Color SelectedBg = new Color(.15f, .15f, .15f);
+      private static readonly Color UnselectedBg = new Color(.235f, .235f, .235f);
 
       private VisualElement _root;
 
@@ -64,6 +68,7 @@ namespace PM.Plugins
       private Button _showEncryptedButton;
       private Button _refreshButton;
       private Button _changeSecureKeyButton;
+      private Button _projectMakersButton;
 
       private Button _showPmPrefsButton;
       private Button _showPlayerPrefsButton;
@@ -83,6 +88,7 @@ namespace PM.Plugins
       private EnumField _exportFormatField;
 
       private Label _unsavedChangesLabel;
+      private Label _fallbackWarningLabel;
 
       private bool _showCreateNew;
       private bool _showConfig;
@@ -119,7 +125,7 @@ namespace PM.Plugins
       {
          PmPrefsEditorWindow wnd = GetWindow<PmPrefsEditorWindow>();
          wnd.titleContent = new GUIContent("PmPrefs");
-         wnd.minSize = new Vector2(380, 356);
+         wnd.minSize = new Vector2(420, 520);
       }
 
       private void Initialize()
@@ -127,15 +133,7 @@ namespace PM.Plugins
          rootVisualElement.Clear();
          _root = rootVisualElement;
 
-         var visualTree = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(
-            "Packages/com.projectmakers.pmprefs/Editor/Style/PmPrefs.uxml");
-
-         if (visualTree == null)
-         {
-            // Fallback: Search in Assets folder (for development)
-            visualTree = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(
-               "Assets/PmPrefs/Editor/Style/PmPrefs.uxml");
-         }
+         var visualTree = LoadUxml("PmPrefs.uxml");
 
          if (visualTree == null)
          {
@@ -160,16 +158,38 @@ namespace PM.Plugins
          saveChangesMessage = "PmPrefs has unsaved changes. Do you want to save them?";
       }
 
+      /// <summary>
+      /// Loads a UXML asset by file name, independent of where the package is installed
+      /// (package folder, Assets/PmPrefs, Assets/Plugins/PmPrefs, ...).
+      /// </summary>
+      private static VisualTreeAsset LoadUxml(string fileName)
+      {
+         // Fast paths for the common install locations.
+         var asset = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(
+            $"Packages/com.projectmakers.pmprefs/Editor/Style/{fileName}");
+         if (asset != null) return asset;
+
+         asset = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>($"Assets/PmPrefs/Editor/Style/{fileName}");
+         if (asset != null) return asset;
+
+         // Robust fallback: locate the asset by name anywhere in the project or packages.
+         string nameNoExt = Path.GetFileNameWithoutExtension(fileName);
+         foreach (var guid in AssetDatabase.FindAssets($"{nameNoExt} t:VisualTreeAsset"))
+         {
+            string path = AssetDatabase.GUIDToAssetPath(guid);
+            if (path.EndsWith("/" + fileName, StringComparison.Ordinal))
+            {
+               var found = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(path);
+               if (found != null) return found;
+            }
+         }
+
+         return null;
+      }
+
       private void InitializeVisualElements()
       {
-         _visualTreePmPrefsListItem = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(
-            "Packages/com.projectmakers.pmprefs/Editor/Style/PmPrefsListItem.uxml");
-
-         if (_visualTreePmPrefsListItem == null)
-         {
-            _visualTreePmPrefsListItem = AssetDatabase.LoadAssetAtPath<VisualTreeAsset>(
-               "Assets/PmPrefs/Editor/Style/PmPrefsListItem.uxml");
-         }
+         _visualTreePmPrefsListItem = LoadUxml("PmPrefsListItem.uxml");
 
          _listViewPmPrefsList = _root.Q<ListView>("PmPrefsList");
          _listViewPlayerPrefsList = _root.Q<ListView>("PlayerPrefsList");
@@ -179,6 +199,7 @@ namespace PM.Plugins
          _createNewButton = _root.Q<Button>("CreateNew_btn");
          _createButton = _root.Q<Button>("Create_btn");
          _changeSecureKeyButton = _root.Q<Button>("ChangeSecureKey_btn");
+         _projectMakersButton = _root.Q<Button>("ProjectMakers_btn");
 
          _createNewKeyField = _root.Q<TextField>("CreateName_tf");
          _createNewValueField = _root.Q<TextField>("CreateValue_tf");
@@ -211,6 +232,7 @@ namespace PM.Plugins
          }
 
          _unsavedChangesLabel = _root.Q<Label>("UnsavedChanges_label");
+         _fallbackWarningLabel = _root.Q<Label>("FallbackWarning_label");
 
          // Wire up event handlers
          _saveButton.clicked += SaveAll;
@@ -226,6 +248,10 @@ namespace PM.Plugins
          _showEncryptedButton.clicked += OnShowDecryptedButtonClicked;
          _showPmPrefsButton.clicked += OnShowPmPrefsButtonClicked;
          _showPlayerPrefsButton.clicked += OnShowPlayerPrefsButtonClicked;
+         if (_projectMakersButton != null)
+         {
+            _projectMakersButton.clicked += () => Application.OpenURL("https://projectmakers.de");
+         }
          if (_searchField != null)
          {
             _searchField.RegisterValueChangedCallback(OnSearchFieldValueChanged);
@@ -241,6 +267,13 @@ namespace PM.Plugins
          if (_exportButton != null) _exportButton.tooltip = "Export preferences to CSV or JSON file";
          if (_importButton != null) _importButton.tooltip = "Import preferences from CSV or JSON file";
          if (_exportFormatField != null) _exportFormatField.tooltip = "Select export file format (CSV or JSON)";
+         if (_projectMakersButton != null) _projectMakersButton.tooltip = "Open projectmakers.de";
+
+         // Reflect the initial state of the toolbar toggles.
+         if (_showPmPrefsButton != null) _showPmPrefsButton.style.backgroundColor = new StyleColor(SelectedBg);
+         if (_showPlayerPrefsButton != null) _showPlayerPrefsButton.style.backgroundColor = new StyleColor(UnselectedBg);
+         if (_showEncryptedButton != null)
+            _showEncryptedButton.style.backgroundColor = new StyleColor(ShowDecrypted ? SelectedBg : UnselectedBg);
       }
 
       private void OnDeleteAllButtonClicked()
@@ -298,12 +331,14 @@ namespace PM.Plugins
          }
          catch (Exception ex)
          {
-            EditorUtility.DisplayDialog("Import Failed", $"Failed to import preferences:\n{ex.Message}", "OK");
+            EditorUtility.DisplayDialog("Import Failed",
+               $"Failed to import preferences:\n{ex.Message}\n\nExisting data was left unchanged.", "OK");
          }
       }
 
       private void OnRefreshButtonClicked()
       {
+         if (!ConfirmDiscardUnsavedChanges()) return;
          _prefsKeyReader.InvalidateCache();
          RefreshLists();
       }
@@ -311,37 +346,37 @@ namespace PM.Plugins
       private void OnSearchFieldValueChanged(ChangeEvent<string> evt)
       {
          _currentSearchText = evt.newValue ?? "";
-         string searchText = _currentSearchText.ToLower();
-         FilterList(_listViewPmPrefsList, PmPrefsList, searchText);
-         FilterList(_listViewPlayerPrefsList, PlayerPrefsList, searchText);
+         FilterList(_listViewPmPrefsList, PmPrefsList, _currentSearchText);
+         FilterList(_listViewPlayerPrefsList, PlayerPrefsList, _currentSearchText);
       }
 
       /// <summary>
       /// Filters a list by creating a filtered itemsSource based on search text.
+      /// Uses case-insensitive substring matching without allocating lowercased copies.
       /// </summary>
-      /// <param name="listView">The list view to filter.</param>
-      /// <param name="sourceList">The complete source list.</param>
-      /// <param name="searchText">The search text (already lowercase).</param>
       private void FilterList(ListView listView, List<PmPrefsListItem> sourceList, string searchText)
       {
          if (listView == null || sourceList == null) return;
 
-         // If search is empty, show all items
-         bool showAll = string.IsNullOrEmpty(searchText);
-
          List<PmPrefsListItem> filtered;
-         if (showAll)
+         if (string.IsNullOrEmpty(searchText))
          {
             filtered = sourceList;
          }
          else
          {
-            filtered = sourceList.Where(item =>
+            filtered = new List<PmPrefsListItem>();
+            foreach (var item in sourceList)
             {
-               string key = item.Key?.ToLower() ?? "";
-               string value = item.Value?.ToLower() ?? "";
-               return key.Contains(searchText) || value.Contains(searchText);
-            }).ToList();
+               bool keyMatch = item.Key != null &&
+                  item.Key.IndexOf(searchText, StringComparison.OrdinalIgnoreCase) >= 0;
+               bool valueMatch = !keyMatch && item.Value != null &&
+                  item.Value.IndexOf(searchText, StringComparison.OrdinalIgnoreCase) >= 0;
+               if (keyMatch || valueMatch)
+               {
+                  filtered.Add(item);
+               }
+            }
          }
 
          listView.itemsSource = filtered;
@@ -350,10 +385,10 @@ namespace PM.Plugins
 
       private void OnShowDecryptedButtonClicked()
       {
+         if (!ConfirmDiscardUnsavedChanges()) return;
+
          ShowDecrypted = !ShowDecrypted;
-         _showEncryptedButton.style.backgroundColor = ShowDecrypted
-            ? new StyleColor(new Color(.15f, .15f, .15f))
-            : new StyleColor(new Color(.235f, .235f, .235f));
+         _showEncryptedButton.style.backgroundColor = new StyleColor(ShowDecrypted ? SelectedBg : UnselectedBg);
 
          RefreshLists();
       }
@@ -370,21 +405,30 @@ namespace PM.Plugins
          }
       }
 
+      /// <summary>
+      /// Returns the readable (decrypted) value for a PmPrefs list item, regardless of view mode.
+      /// </summary>
+      private string GetReadableValue(PmPrefsListItem item)
+      {
+         // When ShowDecrypted is true, item.Value is already the plaintext.
+         // When false, item.Value is the raw stored ciphertext (the field is read-only in that
+         // mode), so decrypting it in memory is correct and avoids a redundant PlayerPrefs read.
+         return ShowDecrypted ? item.Value : PmPrefs.Decrypt(item.Value);
+      }
+
       private void ExportCsv(string path)
       {
          var csv = new StringBuilder();
 
          foreach (var item in PmPrefsList)
          {
-            // When ShowDecrypted is true, the value is already decrypted in the list
-            // When ShowDecrypted is false, we need to decrypt for export (export should be readable)
-            string value = ShowDecrypted ? item.Value : PmPrefs.Decrypt(PlayerPrefs.GetString(PmPrefs.Prefix + item.Key));
-            csv.AppendLine($"PmPrefs;{item.Key};{value}");
+            string value = GetReadableValue(item);
+            csv.AppendLine($"{CsvEscape("PmPrefs")};{CsvEscape(item.Key)};{CsvEscape(value)}");
          }
 
          foreach (var item in PlayerPrefsList)
          {
-            csv.AppendLine($"PlayerPrefs;{item.Key};{item.Value}");
+            csv.AppendLine($"{CsvEscape("PlayerPrefs")};{CsvEscape(item.Key)};{CsvEscape(item.Value)}");
          }
 
          File.WriteAllText(path, csv.ToString(), Encoding.UTF8);
@@ -396,9 +440,7 @@ namespace PM.Plugins
 
          foreach (var item in PmPrefsList)
          {
-            // When ShowDecrypted is true, the value is already decrypted in the list
-            // When ShowDecrypted is false, we need to decrypt for export (export should be readable)
-            string value = ShowDecrypted ? item.Value : PmPrefs.Decrypt(PlayerPrefs.GetString(PmPrefs.Prefix + item.Key));
+            string value = GetReadableValue(item);
             exportData.pmPrefs.Add(new PreferenceItem { key = item.Key, value = value });
          }
 
@@ -427,47 +469,42 @@ namespace PM.Plugins
 
       private void ImportCsv(string importPath)
       {
-         // Only delete PmPrefs, not all PlayerPrefs
-         PmPrefs.DeleteAllPmPrefs();
+         // Parse fully into memory BEFORE deleting anything, so a failed/partial read never
+         // destroys existing data.
+         string text = File.ReadAllText(importPath, Encoding.UTF8);
+         var records = ParseCsv(text);
 
-         using (var reader = new StreamReader(File.OpenRead(importPath), Encoding.UTF8))
+         var pmEntries = new List<KeyValuePair<string, string>>();
+         var playerEntries = new List<KeyValuePair<string, string>>();
+
+         for (int i = 0; i < records.Count; i++)
          {
-            int lineNumber = 0;
-            while (!reader.EndOfStream)
-            {
-               lineNumber++;
-               var line = reader.ReadLine();
-               if (string.IsNullOrWhiteSpace(line)) continue;
+            var fields = records[i];
+            if (fields.Count < 3) continue;
 
-               var parts = line.Split(new[] { ';' }, 3);
-               if (parts.Length < 3)
-               {
-                  Debug.LogWarning($"[PmPrefs] Skipping invalid line {lineNumber}: {line}");
-                  continue;
-               }
+            string type = fields[0];
+            string key = fields[1];
+            string value = fields[2];
 
-               var type = parts[0];
-               var key = parts[1];
-               var value = parts[2];
+            if (string.IsNullOrEmpty(key)) continue;
 
-               if (type == "PmPrefs")
-               {
-                  PmPrefs.SaveRaw(key, value);
-               }
-               else if (type == "PlayerPrefs")
-               {
-                  // Try to detect type and save appropriately
-                  if (int.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out int intVal))
-                     PlayerPrefs.SetInt(key, intVal);
-                  else if (float.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out float floatVal))
-                     PlayerPrefs.SetFloat(key, floatVal);
-                  else
-                     PlayerPrefs.SetString(key, value);
-               }
-            }
+            if (type == "PmPrefs")
+               pmEntries.Add(new KeyValuePair<string, string>(key, value));
+            else if (type == "PlayerPrefs")
+               playerEntries.Add(new KeyValuePair<string, string>(key, value));
+            else
+               Debug.LogWarning($"[PmPrefs] Skipping CSV record {i + 1}: unknown type '{type}'.");
          }
 
-         // Flush key list changes, then save all to disk once
+         // Apply only after a successful parse.
+         PmPrefs.DeleteAllPmPrefs();
+
+         foreach (var entry in pmEntries)
+            PmPrefs.SaveRaw(entry.Key, entry.Value);
+
+         foreach (var entry in playerEntries)
+            SetPlayerPrefAuto(entry.Key, entry.Value);
+
          PmPrefs.FlushKeyList();
          PlayerPrefs.Save();
          _prefsKeyReader.InvalidateCache();
@@ -476,10 +513,7 @@ namespace PM.Plugins
 
       private void ImportJson(string importPath)
       {
-         // Only delete PmPrefs, not all PlayerPrefs
-         PmPrefs.DeleteAllPmPrefs();
-         PlayerPrefs.Save();
-
+         // Parse + validate BEFORE deleting anything.
          string json = File.ReadAllText(importPath, Encoding.UTF8);
          ExportData importData = JsonUtility.FromJson<ExportData>(json);
 
@@ -488,33 +522,24 @@ namespace PM.Plugins
             throw new Exception("Failed to parse JSON file. Invalid format.");
          }
 
-         // Import PmPrefs
+         // Apply only after a successful parse.
+         PmPrefs.DeleteAllPmPrefs();
+
          if (importData.pmPrefs != null)
          {
             foreach (var item in importData.pmPrefs)
             {
-               if (string.IsNullOrEmpty(item.key)) continue;
-
+               if (item == null || string.IsNullOrEmpty(item.key)) continue;
                PmPrefs.SaveRaw(item.key, item.value ?? "");
             }
          }
 
-         // Import PlayerPrefs
          if (importData.playerPrefs != null)
          {
             foreach (var item in importData.playerPrefs)
             {
-               if (string.IsNullOrEmpty(item.key)) continue;
-
-               string value = item.value ?? "";
-
-               // Try to detect type and save appropriately
-               if (int.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out int intVal))
-                  PlayerPrefs.SetInt(item.key, intVal);
-               else if (float.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out float floatVal))
-                  PlayerPrefs.SetFloat(item.key, floatVal);
-               else
-                  PlayerPrefs.SetString(item.key, value);
+               if (item == null || string.IsNullOrEmpty(item.key)) continue;
+               SetPlayerPrefAuto(item.key, item.value ?? "");
             }
          }
 
@@ -522,6 +547,136 @@ namespace PM.Plugins
          PlayerPrefs.Save();
          _prefsKeyReader.InvalidateCache();
          RefreshLists();
+      }
+
+      /// <summary>
+      /// Stores a regular PlayerPref, detecting int/float only for unambiguous numeric strings.
+      /// Strings with leading zeros, thousands separators, or tokens like NaN/Infinity are kept
+      /// as strings to avoid silently changing their type/precision.
+      /// </summary>
+      private static void SetPlayerPrefAuto(string key, string value)
+      {
+         value = value ?? "";
+
+         if (IntegerPattern.IsMatch(value)
+            && int.TryParse(value, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out int intVal))
+         {
+            PlayerPrefs.SetInt(key, intVal);
+            return;
+         }
+
+         bool looksFractional = value.IndexOf('.') >= 0 || value.IndexOf('e') >= 0 || value.IndexOf('E') >= 0;
+         if (looksFractional
+            && FloatPattern.IsMatch(value)
+            && float.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out float floatVal)
+            && !float.IsNaN(floatVal) && !float.IsInfinity(floatVal))
+         {
+            PlayerPrefs.SetFloat(key, floatVal);
+            return;
+         }
+
+         PlayerPrefs.SetString(key, value);
+      }
+
+      // ----- CSV helpers (RFC-4180 style quoting; ';' delimiter) -----
+
+      private static string CsvEscape(string field)
+      {
+         field = field ?? "";
+         bool needsQuote = field.IndexOf(';') >= 0 || field.IndexOf('"') >= 0
+            || field.IndexOf('\n') >= 0 || field.IndexOf('\r') >= 0;
+         if (!needsQuote) return field;
+         return "\"" + field.Replace("\"", "\"\"") + "\"";
+      }
+
+      /// <summary>
+      /// Parses CSV text into records of fields, honoring double-quoted fields that may contain
+      /// the ';' delimiter, embedded newlines, and escaped ("") quotes.
+      /// </summary>
+      private static List<List<string>> ParseCsv(string text)
+      {
+         var records = new List<List<string>>();
+         if (text == null) return records;
+
+         var record = new List<string>();
+         var field = new StringBuilder();
+         bool inQuotes = false;
+         bool hasContent = false; // a field separator or any char was seen on the current record
+
+         int i = 0;
+         while (i < text.Length)
+         {
+            char c = text[i];
+
+            if (inQuotes)
+            {
+               if (c == '"')
+               {
+                  if (i + 1 < text.Length && text[i + 1] == '"')
+                  {
+                     field.Append('"');
+                     i += 2;
+                     continue;
+                  }
+                  inQuotes = false;
+                  i++;
+                  continue;
+               }
+               field.Append(c);
+               i++;
+               continue;
+            }
+
+            if (c == '"')
+            {
+               inQuotes = true;
+               hasContent = true;
+               i++;
+               continue;
+            }
+            if (c == ';')
+            {
+               record.Add(field.ToString());
+               field.Clear();
+               hasContent = true;
+               i++;
+               continue;
+            }
+            if (c == '\r')
+            {
+               i++;
+               continue;
+            }
+            if (c == '\n')
+            {
+               record.Add(field.ToString());
+               field.Clear();
+               if (hasContent || record.Count > 1)
+               {
+                  records.Add(record);
+               }
+               record = new List<string>();
+               hasContent = false;
+               i++;
+               continue;
+            }
+
+            field.Append(c);
+            hasContent = true;
+            i++;
+         }
+
+         // Trailing field/record without a final newline.
+         if (hasContent || field.Length > 0 || record.Count > 0)
+         {
+            record.Add(field.ToString());
+            if (hasContent || record.Count > 1 || field.Length > 0)
+            {
+               records.Add(record);
+            }
+         }
+
+         return records;
       }
 
       private void OnConfigurationButtonClicked()
@@ -531,17 +686,17 @@ namespace PM.Plugins
          if (_showConfig)
          {
             _configurationContainer.style.display = DisplayStyle.Flex;
-            _configurationButton.style.backgroundColor = new StyleColor(new Color(.15f, .15f, .15f));
+            _configurationButton.style.backgroundColor = new StyleColor(SelectedBg);
 
             // Hide create panel
             _createNewContainer.style.display = DisplayStyle.None;
-            _createNewButton.style.backgroundColor = new StyleColor(new Color(.235f, .235f, .235f));
+            _createNewButton.style.backgroundColor = new StyleColor(UnselectedBg);
             _showCreateNew = false;
          }
          else
          {
             _configurationContainer.style.display = DisplayStyle.None;
-            _configurationButton.style.backgroundColor = new StyleColor(new Color(.235f, .235f, .235f));
+            _configurationButton.style.backgroundColor = new StyleColor(UnselectedBg);
          }
       }
 
@@ -552,26 +707,26 @@ namespace PM.Plugins
          if (_showCreateNew)
          {
             _createNewContainer.style.display = DisplayStyle.Flex;
-            _createNewButton.style.backgroundColor = new StyleColor(new Color(.15f, .15f, .15f));
+            _createNewButton.style.backgroundColor = new StyleColor(SelectedBg);
 
             // Hide config panel
             _configurationContainer.style.display = DisplayStyle.None;
-            _configurationButton.style.backgroundColor = new StyleColor(new Color(.235f, .235f, .235f));
+            _configurationButton.style.backgroundColor = new StyleColor(UnselectedBg);
             _showConfig = false;
          }
          else
          {
             _createNewContainer.style.display = DisplayStyle.None;
-            _createNewButton.style.backgroundColor = new StyleColor(new Color(.235f, .235f, .235f));
+            _createNewButton.style.backgroundColor = new StyleColor(UnselectedBg);
          }
       }
 
       private void OnShowPlayerPrefsButtonClicked()
       {
          _listViewPmPrefsList.style.display = DisplayStyle.None;
-         _showPlayerPrefsButton.style.backgroundColor = new StyleColor(new Color(.15f, .15f, .15f));
+         _showPlayerPrefsButton.style.backgroundColor = new StyleColor(SelectedBg);
          _listViewPlayerPrefsList.style.display = DisplayStyle.Flex;
-         _showPmPrefsButton.style.backgroundColor = new StyleColor(new Color(.235f, .235f, .235f));
+         _showPmPrefsButton.style.backgroundColor = new StyleColor(UnselectedBg);
       }
 
       private void OnDefaultJsonButtonClicked()
@@ -594,15 +749,15 @@ namespace PM.Plugins
       private void OnShowPmPrefsButtonClicked()
       {
          _listViewPmPrefsList.style.display = DisplayStyle.Flex;
-         _showPmPrefsButton.style.backgroundColor = new StyleColor(new Color(.15f, .15f, .15f));
+         _showPmPrefsButton.style.backgroundColor = new StyleColor(SelectedBg);
          _listViewPlayerPrefsList.style.display = DisplayStyle.None;
-         _showPlayerPrefsButton.style.backgroundColor = new StyleColor(new Color(.235f, .235f, .235f));
+         _showPlayerPrefsButton.style.backgroundColor = new StyleColor(UnselectedBg);
       }
 
       private void CreateNewPref()
       {
-         string key = _createNewKeyField.text;
-         string value = _createNewValueField.text;
+         string key = _createNewKeyField.value;
+         string value = _createNewValueField.value;
 
          if (string.IsNullOrWhiteSpace(key))
          {
@@ -616,23 +771,13 @@ namespace PM.Plugins
             return;
          }
 
-         if (string.IsNullOrWhiteSpace(value))
+         if (string.IsNullOrEmpty(value))
          {
             EditorUtility.DisplayDialog("Invalid Value", "Please enter a value.", "OK");
             return;
          }
 
-         if (!IsValidJson(value))
-         {
-            EditorUtility.DisplayDialog("Invalid JSON",
-               "The value must be valid JSON.\n\nExamples:\n" +
-               "  {\"name\": \"John\", \"score\": 100}\n" +
-               "  {\"enabled\": true}\n" +
-               "  \"simple string\"", "OK");
-            return;
-         }
-
-         // Save raw value directly (bypassing JsonUtility.ToJson which corrupts plain strings)
+         // Values are stored verbatim (matching the runtime API, which stores raw strings).
          PmPrefs.SaveRaw(key, value);
          PmPrefs.FlushKeyList();
          PlayerPrefs.Save();
@@ -648,28 +793,34 @@ namespace PM.Plugins
       {
          if (listView == null || _visualTreePmPrefsListItem == null) return;
 
-         listView.Clear();
-
-         listView.makeItem = () =>
+         // Assign the item factories once; only the data source changes on subsequent refreshes.
+         if (listView.makeItem == null)
          {
-            var newListEntry = _visualTreePmPrefsListItem.Instantiate();
-            var newListEntryLogic = new PmPrefsListItemEntryController();
-
-            newListEntry.userData = newListEntryLogic;
-            newListEntryLogic.SetVisualElement(newListEntry);
-            newListEntryLogic.SetOnValueChangedCallback(UpdateUnsavedChangesIndicator);
-
-            return newListEntry;
-         };
-
-         listView.bindItem = (item, index) =>
-         {
-            var source = (List<PmPrefsListItem>)listView.itemsSource;
-            if (index >= 0 && index < source.Count)
+            listView.makeItem = () =>
             {
-               ((PmPrefsListItemEntryController)item.userData).SetData(source[index]);
-            }
-         };
+               var newListEntry = _visualTreePmPrefsListItem.Instantiate();
+               var newListEntryLogic = new PmPrefsListItemEntryController();
+
+               newListEntry.userData = newListEntryLogic;
+               newListEntryLogic.SetVisualElement(newListEntry);
+               newListEntryLogic.SetOnValueChangedCallback(UpdateUnsavedChangesIndicator);
+
+               return newListEntry;
+            };
+
+            listView.bindItem = (item, index) =>
+            {
+               var source = (List<PmPrefsListItem>)listView.itemsSource;
+               if (index >= 0 && index < source.Count)
+               {
+                  var controller = (PmPrefsListItemEntryController)item.userData;
+                  controller.SetData(source[index]);
+                  // Encrypted view shows raw ciphertext; keep it read-only so it cannot be
+                  // hand-edited into corrupted data.
+                  controller.SetValueEditable(ShowDecrypted);
+               }
+            };
+         }
 
          listView.itemsSource = items;
       }
@@ -699,6 +850,31 @@ namespace PM.Plugins
          return false;
       }
 
+      /// <summary>
+      /// If there are unsaved changes, prompts the user to Save, Discard, or Cancel.
+      /// Returns true if the caller should proceed (changes saved or discarded), false to abort.
+      /// </summary>
+      private bool ConfirmDiscardUnsavedChanges()
+      {
+         if (PmPrefsList == null || PlayerPrefsList == null) return true;
+         if (!HasUnsavedChanges()) return true;
+
+         int choice = EditorUtility.DisplayDialogComplex("Unsaved Changes",
+            "You have unsaved changes that will be lost.\n\nSave them before continuing?",
+            "Save", "Cancel", "Discard");
+
+         if (choice == 0) // Save
+         {
+            SaveAll();
+            return true;
+         }
+         if (choice == 2) // Discard
+         {
+            return true;
+         }
+         return false; // Cancel
+      }
+
       private void UpdateUnsavedChangesIndicator()
       {
          bool unsaved = HasUnsavedChanges();
@@ -721,32 +897,26 @@ namespace PM.Plugins
          }
       }
 
+      private void UpdateFallbackWarning()
+      {
+         if (_fallbackWarningLabel == null) return;
+
+         if (_prefsKeyReader != null && _prefsKeyReader.UsedFallback)
+         {
+            _fallbackWarningLabel.text =
+               "Could not read platform storage - showing tracked PmPrefs keys only. Regular PlayerPrefs may be missing.";
+            _fallbackWarningLabel.style.display = DisplayStyle.Flex;
+         }
+         else
+         {
+            _fallbackWarningLabel.style.display = DisplayStyle.None;
+         }
+      }
+
       private void SaveAll()
       {
          int savedCount = 0;
          int deletedCount = 0;
-
-         // Validate all changed PmPrefs values before saving (when showing decrypted)
-         if (ShowDecrypted)
-         {
-            var invalidKeys = new List<string>();
-            foreach (var pref in PmPrefsList)
-            {
-               if (pref.Changed && !pref.DeleteMarker && !IsValidJson(pref.Value))
-               {
-                  invalidKeys.Add(pref.Key);
-               }
-            }
-
-            if (invalidKeys.Count > 0)
-            {
-               string keys = string.Join(", ", invalidKeys);
-               EditorUtility.DisplayDialog("Invalid JSON",
-                  $"The following keys have invalid JSON values:\n\n{keys}\n\nPlease fix the values and try again.",
-                  "OK");
-               return;
-            }
-         }
 
          // Save PmPrefs changes
          for (var i = PmPrefsList.Count - 1; i >= 0; i--)
@@ -763,14 +933,15 @@ namespace PM.Plugins
 
             if (pref.Changed)
             {
-               // If showing decrypted, value needs to be encrypted on save
+               // If showing decrypted, the value needs to be encrypted on save.
                if (ShowDecrypted)
                {
                   PlayerPrefs.SetString(PmPrefs.Prefix + pref.Key, PmPrefs.Encrypt(pref.Value));
                }
                else
                {
-                  // Already encrypted, save as-is
+                  // Encrypted view is read-only, so this path is not normally reached; persist
+                  // the (already-encrypted) value as-is for safety.
                   PlayerPrefs.SetString(PmPrefs.Prefix + pref.Key, pref.Value);
                }
                pref.Save();
@@ -793,14 +964,7 @@ namespace PM.Plugins
 
             if (pref.Changed)
             {
-               // Detect type
-               if (int.TryParse(pref.Value, NumberStyles.Any, CultureInfo.InvariantCulture, out int intVal))
-                  PlayerPrefs.SetInt(pref.Key, intVal);
-               else if (float.TryParse(pref.Value, NumberStyles.Any, CultureInfo.InvariantCulture, out float floatVal))
-                  PlayerPrefs.SetFloat(pref.Key, floatVal);
-               else
-                  PlayerPrefs.SetString(pref.Key, pref.Value);
-
+               SetPlayerPrefAuto(pref.Key, pref.Value);
                pref.Save();
                savedCount++;
             }
@@ -811,9 +975,8 @@ namespace PM.Plugins
          PlayerPrefs.Save();
          _prefsKeyReader.InvalidateCache();
 
-         // Refresh list views without full re-initialization
-         _listViewPmPrefsList?.RefreshItems();
-         _listViewPlayerPrefsList?.RefreshItems();
+         // Rebuild the (possibly filtered) item sources so deleted rows disappear immediately.
+         ApplyCurrentFilter();
 
          if (savedCount > 0 || deletedCount > 0)
          {
@@ -846,28 +1009,17 @@ namespace PM.Plugins
 
          // Re-apply the current filter after refreshing lists
          ApplyCurrentFilter();
+         UpdateFallbackWarning();
          UpdateUnsavedChangesIndicator();
       }
 
       /// <summary>
-      /// Re-applies the current search filter to both list views.
-      /// Used after refreshing lists to maintain filter state.
+      /// Re-applies the current search filter to both list views and refreshes them.
       /// </summary>
       private void ApplyCurrentFilter()
       {
-         if (string.IsNullOrEmpty(_currentSearchText))
-         {
-            // Reset to full lists
-            if (_listViewPmPrefsList != null)
-               _listViewPmPrefsList.itemsSource = PmPrefsList;
-            if (_listViewPlayerPrefsList != null)
-               _listViewPlayerPrefsList.itemsSource = PlayerPrefsList;
-            return;
-         }
-
-         string searchText = _currentSearchText.ToLower();
-         FilterList(_listViewPmPrefsList, PmPrefsList, searchText);
-         FilterList(_listViewPlayerPrefsList, PlayerPrefsList, searchText);
+         FilterList(_listViewPmPrefsList, PmPrefsList, _currentSearchText);
+         FilterList(_listViewPlayerPrefsList, PlayerPrefsList, _currentSearchText);
       }
 
       private void ChangeSecureKey()
@@ -897,61 +1049,89 @@ namespace PM.Plugins
             return;
          }
 
-         // Delete all PmPrefs (they can't be decrypted with new key)
-         PmPrefs.DeleteAllPmPrefs();
-         PlayerPrefs.Save();
-
-         // Find and update the PmPrefs.cs file
-         string filePath = FindPmPrefsFile();
-
-         if (string.IsNullOrEmpty(filePath))
+         // 1) Persist the new key FIRST. If this fails, abort WITHOUT deleting any data.
+         if (!TryWriteSecureKey(key, out string error))
          {
             EditorUtility.DisplayDialog("Error",
-               "Could not find PmPrefs.cs file.\n\n" +
-               "The secure key could not be changed automatically.\n" +
-               "Please manually update the SecureKey constant in PmPrefs.cs.", "OK");
+               $"Could not save the new secure key:\n{error}\n\nNo data was deleted.", "OK");
             return;
          }
 
+         // 2) Activate the new key and clear data that can no longer be decrypted.
+         PmPrefs.RefreshSecureKey();
+         PmPrefs.DeleteAllPmPrefs();
+         PlayerPrefs.Save();
+         PmPrefs.RefreshKeyCache();
+
+         _changeSecureKeyField.value = "";
+         _prefsKeyReader.InvalidateCache();
+         RefreshLists();
+
+         EditorUtility.DisplayDialog("Success",
+            "The secure key has been changed.\n\n" +
+            "Existing PmPrefs data was cleared because it cannot be decrypted with the new key.", "OK");
+      }
+
+      /// <summary>
+      /// Writes the secure key into a writable <see cref="PmPrefsKeyAsset"/> config asset
+      /// (created under Assets/ if necessary). Returns false with an error message on failure.
+      /// </summary>
+      private bool TryWriteSecureKey(string key, out string error)
+      {
+         error = null;
          try
          {
-            string[] lines = File.ReadAllLines(filePath);
-            bool found = false;
-
-            for (int i = 0; i < lines.Length; i++)
+            var asset = FindOrCreateConfigAsset();
+            if (asset == null)
             {
-               if (lines[i].Contains("public const string SecureKey ="))
-               {
-                  string toReplace = QuotedStringPattern.Match(lines[i]).Groups[1].Value;
-                  lines[i] = lines[i].Replace($"\"{toReplace}\"", $"\"{key}\"");
-                  found = true;
-                  break;
-               }
+               error = "Could not create the PmPrefs config asset.";
+               return false;
             }
 
-            if (found)
-            {
-               File.WriteAllLines(filePath, lines);
-               AssetDatabase.Refresh();
-
-               EditorUtility.DisplayDialog("Success",
-                  $"Secure key has been changed.\n\nThe project will recompile with the new key.", "OK");
-            }
-            else
-            {
-               EditorUtility.DisplayDialog("Error",
-                  "Could not find SecureKey constant in PmPrefs.cs.\n\n" +
-                  "Please manually update the SecureKey constant.", "OK");
-            }
+            asset.secureKey = key;
+            EditorUtility.SetDirty(asset);
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            return true;
          }
          catch (Exception ex)
          {
-            EditorUtility.DisplayDialog("Error",
-               $"Failed to update PmPrefs.cs:\n{ex.Message}", "OK");
+            error = ex.Message;
+            return false;
+         }
+      }
+
+      /// <summary>
+      /// Finds an existing writable PmPrefsKeyAsset under Assets/, or creates one in
+      /// Assets/PmPrefs/Resources so it is included in builds and is writable for all install types.
+      /// </summary>
+      private static PmPrefsKeyAsset FindOrCreateConfigAsset()
+      {
+         // Only reuse an asset that the runtime can actually load: under Assets/ AND inside a
+         // Resources folder (Resources.LoadAll cannot see assets outside Resources).
+         var guids = AssetDatabase.FindAssets("t:PmPrefsKeyAsset");
+         foreach (var guid in guids)
+         {
+            string path = AssetDatabase.GUIDToAssetPath(guid).Replace('\\', '/');
+            if (path.StartsWith("Assets/") && path.Contains("/Resources/"))
+            {
+               var existing = AssetDatabase.LoadAssetAtPath<PmPrefsKeyAsset>(path);
+               if (existing != null) return existing;
+            }
          }
 
-         _prefsKeyReader.InvalidateCache();
-         RefreshLists();
+         const string dir = "Assets/PmPrefs/Resources";
+         if (!Directory.Exists(dir))
+         {
+            Directory.CreateDirectory(dir);
+         }
+
+         var asset = ScriptableObject.CreateInstance<PmPrefsKeyAsset>();
+         string assetPath = dir + "/PmPrefsKeyAsset.asset";
+         AssetDatabase.CreateAsset(asset, assetPath);
+         AssetDatabase.SaveAssets();
+         AssetDatabase.ImportAsset(assetPath);
+         return asset;
       }
 
       /// <summary>
@@ -974,94 +1154,6 @@ namespace PM.Plugins
          _prefsKeyReader.InvalidateCache();
          RefreshLists();
          base.DiscardChanges();
-      }
-
-      /// <summary>
-      /// Finds the PmPrefs.cs file in either Packages or Assets folder.
-      /// </summary>
-      private string FindPmPrefsFile()
-      {
-         // First check in Packages folder
-         string packagePath = Path.GetFullPath("Packages/com.projectmakers.pmprefs/Scripts/PmPrefs.cs");
-         if (File.Exists(packagePath))
-            return packagePath;
-
-         // Check in Assets folder (for development)
-         string[] guids = AssetDatabase.FindAssets("PmPrefs t:Script");
-         foreach (string guid in guids)
-         {
-            string path = AssetDatabase.GUIDToAssetPath(guid);
-            if (path.EndsWith("PmPrefs.cs") && !path.Contains("Editor"))
-            {
-               return Path.GetFullPath(path);
-            }
-         }
-
-         // Last resort: recursive search in Assets
-         return FindFileRecursive("PmPrefs.cs", Application.dataPath);
-      }
-
-      /// <summary>
-      /// Validates whether a string is syntactically valid JSON.
-      /// Checks objects, arrays, strings, numbers, booleans, and null.
-      /// </summary>
-      private static bool IsValidJson(string text)
-      {
-         if (string.IsNullOrWhiteSpace(text)) return false;
-         text = text.Trim();
-         if (text.Length == 0) return false;
-
-         char first = text[0];
-         char last = text[text.Length - 1];
-
-         // JSON object or array: validate bracket balance
-         if ((first == '{' && last == '}') || (first == '[' && last == ']'))
-         {
-            int depth = 0;
-            bool inStr = false;
-            bool esc = false;
-            foreach (char c in text)
-            {
-               if (esc) { esc = false; continue; }
-               if (c == '\\' && inStr) { esc = true; continue; }
-               if (c == '"') { inStr = !inStr; continue; }
-               if (inStr) continue;
-               if (c == '{' || c == '[') depth++;
-               else if (c == '}' || c == ']') { depth--; if (depth < 0) return false; }
-            }
-            return depth == 0 && !inStr;
-         }
-
-         // JSON string
-         if (first == '"' && last == '"' && text.Length >= 2) return true;
-
-         // JSON primitives
-         if (text == "true" || text == "false" || text == "null") return true;
-
-         // JSON number
-         double d;
-         return double.TryParse(text, System.Globalization.NumberStyles.Any,
-            System.Globalization.CultureInfo.InvariantCulture, out d);
-      }
-
-      private string FindFileRecursive(string filename, string folder)
-      {
-         try
-         {
-            var files = Directory.GetFiles(folder, filename, SearchOption.AllDirectories);
-            foreach (var file in files)
-            {
-               // Skip editor scripts
-               if (!file.Contains("Editor"))
-                  return file;
-            }
-         }
-         catch (Exception)
-         {
-            // Ignore access denied errors
-         }
-
-         return null;
       }
    }
 }

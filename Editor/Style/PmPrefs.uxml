@@ -24,14 +24,14 @@
             <ui:Label text="Create PmPref" display-tooltip-when-elided="true" style="align-items: center; flex-direction: row; flex-grow: 0; justify-content: flex-start; -unity-text-align: upper-center; font-size: 14px; -unity-font-style: bold; border-bottom-width: 1px; border-bottom-color: rgb(32, 32, 32); margin-top: 16px; margin-bottom: 8px; padding-bottom: 2px; padding-left: 16px; padding-right: 16px;" />
         </ui:VisualElement>
         <ui:VisualElement name="Name" style="flex-direction: row; min-width: auto; min-height: auto; justify-content: center; margin-top: 8px;">
-            <ui:TextField picking-mode="Ignore" label="Name:" value="filler text" name="CreateName_tf" style="flex-grow: 0; margin-left: 0; margin-right: 0; margin-top: 0; margin-bottom: 0; min-width: 360px; max-width: 512px;" />
+            <ui:TextField picking-mode="Ignore" label="Name:" value="filler text" name="CreateName_tf" style="flex-grow: 0; margin-left: 0; margin-right: 0; margin-top: 0; margin-bottom: 0; min-width: 280px; max-width: 512px;" />
         </ui:VisualElement>
         <ui:VisualElement name="Value" style="flex-direction: column; min-width: auto; min-height: auto; align-items: center; margin-top: 4px; margin-bottom: 4px;">
-            <ui:TextField picking-mode="Ignore" label="Value:" value="" name="CreateValue_tf" multiline="true" tooltip="Enter the Value as JSON." style="flex-grow: 0; margin-left: 0; margin-right: 0; margin-top: 0; margin-bottom: 0; min-width: 360px; max-width: 512px; min-height: 80px; white-space: normal;" />
-            <ui:Button text="Insert Default JSON" display-tooltip-when-elided="true" name="DefaultJson_btn" tooltip="Insert a default JSON template into the value field" style="min-width: 360px; max-width: 512px; margin-top: 4px;" />
+            <ui:TextField picking-mode="Ignore" label="Value:" value="" name="CreateValue_tf" multiline="true" tooltip="Enter the Value as JSON." style="flex-grow: 0; margin-left: 0; margin-right: 0; margin-top: 0; margin-bottom: 0; min-width: 280px; max-width: 512px; min-height: 80px; white-space: normal;" />
+            <ui:Button text="Insert Default JSON" display-tooltip-when-elided="true" name="DefaultJson_btn" tooltip="Insert a default JSON template into the value field" style="min-width: 280px; max-width: 512px; margin-top: 4px;" />
         </ui:VisualElement>
         <ui:VisualElement name="Buttons" style="justify-content: center; align-items: stretch; flex-direction: row;">
-            <ui:Button text="Create" display-tooltip-when-elided="true" name="Create_btn" style="min-width: 360px; max-width: 512px;" />
+            <ui:Button text="Create" display-tooltip-when-elided="true" name="Create_btn" style="min-width: 280px; max-width: 512px;" />
         </ui:VisualElement>
     </ui:VisualElement>
     <ui:VisualElement name="Configuration" style="display: none; margin-bottom: 8px; border-bottom-width: 1px; border-bottom-color: rgb(32, 32, 32); padding-bottom: 8px; height: auto; flex-grow: 0; justify-content: flex-start; flex-shrink: 0;">
@@ -42,20 +42,20 @@
             <ui:Label text="Secure Key" display-tooltip-when-elided="true" style="align-items: center; flex-direction: row; flex-grow: 0; justify-content: flex-start; -unity-text-align: upper-center; font-size: 14px; -unity-font-style: bold; border-bottom-width: 1px; border-bottom-color: rgb(32, 32, 32); margin-top: 16px; margin-bottom: 8px; padding-bottom: 2px; padding-left: 16px; padding-right: 16px;" />
         </ui:VisualElement>
         <ui:VisualElement name="SecureKey" style="flex-direction: row; min-width: auto; min-height: auto; justify-content: center; margin-top: 8px; margin-bottom: 4px;">
-            <ui:TextField picking-mode="Ignore" label="Secure Key:" value="**********" name="ChangeSecureKey_tf" mask-character="a-z" style="flex-grow: 0; margin-left: 0; margin-right: 0; margin-top: 0; margin-bottom: 0; min-width: 360px; max-width: 512px;" />
+            <ui:TextField picking-mode="Ignore" label="Secure Key:" value="**********" name="ChangeSecureKey_tf" mask-character="a-z" style="flex-grow: 0; margin-left: 0; margin-right: 0; margin-top: 0; margin-bottom: 0; min-width: 280px; max-width: 512px;" />
         </ui:VisualElement>
         <ui:VisualElement name="SetKeyButton" style="justify-content: center; align-items: stretch; flex-direction: row;">
-            <ui:Button text="SetKey" display-tooltip-when-elided="true" name="ChangeSecureKey_btn" style="min-width: 360px; max-width: 512px;" />
+            <ui:Button text="SetKey" display-tooltip-when-elided="true" name="ChangeSecureKey_btn" style="min-width: 280px; max-width: 512px;" />
         </ui:VisualElement>
         <ui:VisualElement name="ImportExportTitle" style="flex-direction: row; min-width: auto; min-height: auto; justify-content: center;">
             <ui:Label text="Import / Export" display-tooltip-when-elided="true" style="align-items: center; flex-direction: row; flex-grow: 0; justify-content: flex-start; -unity-text-align: upper-center; font-size: 14px; -unity-font-style: bold; border-bottom-width: 1px; border-bottom-color: rgb(32, 32, 32); margin-top: 16px; margin-bottom: 8px; padding-bottom: 2px; padding-left: 16px; padding-right: 16px;" />
         </ui:VisualElement>
         <ui:VisualElement name="ExportFormatField" style="flex-direction: row; min-width: auto; min-height: auto; justify-content: center; margin-top: 8px; margin-bottom: 8px;">
-            <uie:EnumField label="Export Format:" name="ExportFormat_enum" style="flex-grow: 0; margin-left: 0; margin-right: 0; margin-top: 0; margin-bottom: 0; min-width: 360px; max-width: 512px;" />
+            <uie:EnumField label="Export Format:" name="ExportFormat_enum" style="flex-grow: 0; margin-left: 0; margin-right: 0; margin-top: 0; margin-bottom: 0; min-width: 280px; max-width: 512px;" />
         </ui:VisualElement>
         <ui:VisualElement name="ImportExportButton" style="flex-direction: row; min-width: auto; min-height: auto; justify-content: center;">
             <ui:Button text="Import" display-tooltip-when-elided="true" name="Import_btn" tooltip="Imports PmPrefs data from a csv file. Important: the Import overwrites all existing PmPrefs and encrypts the new data with the new SecureKey (if a SecureKey is currently specified)." style="min-width: 176px; max-width: 252px;" />
-            <ui:Button text="Export" display-tooltip-when-elided="true" name="Export_btn" tooltip="Exports all currently visible PmPrefs variables.\nImportant: Only the variables which are displayed are exported! Likewise, they are exported encrypted or decrypted, depending on how it is displayed in the PmPrefs Editor." style="min-width: 176px; max-width: 256px;" />
+            <ui:Button text="Export" display-tooltip-when-elided="true" name="Export_btn" tooltip="Exports all currently visible PmPrefs variables.&#10;Important: Only the variables which are displayed are exported! Likewise, they are exported encrypted or decrypted, depending on how it is displayed in the PmPrefs Editor." style="min-width: 176px; max-width: 256px;" />
         </ui:VisualElement>
     </ui:VisualElement>
     <ui:VisualElement name="ListSwitchView" style="flex-direction: row; flex-grow: 0; flex-shrink: 1;" />
@@ -65,13 +65,15 @@
             <uie:ToolbarButton text="PlayerPrefs" display-tooltip-when-elided="true" name="PlayerPrefs_btn" style="-unity-text-align: middle-center; padding-left: 1px; padding-right: 1px; padding-top: 1px; padding-bottom: 1px; flex-direction: row; flex-grow: 1; flex-shrink: 0; margin-left: 2px; margin-right: 2px; margin-top: 2px; margin-bottom: 2px; min-width: 45%;" />
         </uie:Toolbar>
     </ui:VisualElement>
-    <ui:VisualElement name="ListView" style="align-items: stretch; justify-content: flex-start; flex-grow: 1; flex-shrink: 1; flex-basis: auto; transform-origin: center; margin-top: 0; margin-left: 0; margin-right: 0; margin-bottom: 0;">
+    <ui:Label text="" display-tooltip-when-elided="true" name="FallbackWarning_label" style="display: none; white-space: normal; color: rgb(255, 200, 80); -unity-font-style: italic; font-size: 11px; margin-left: 6px; margin-right: 6px; margin-top: 2px; margin-bottom: 2px; flex-shrink: 0;" />
+    <ui:VisualElement name="ListView" style="align-items: stretch; justify-content: flex-start; flex-grow: 1; flex-shrink: 1; flex-basis: auto; min-height: 140px; transform-origin: center; margin-top: 0; margin-left: 0; margin-right: 0; margin-bottom: 0;">
         <ui:VisualElement name="Header" style="flex-direction: row; flex-grow: 0; flex-shrink: 0; justify-content: flex-start; border-left-width: 0; border-right-width: 0; border-top-width: 0; border-bottom-width: 1px; border-left-color: rgb(32, 32, 32); border-right-color: rgb(32, 32, 32); border-top-color: rgb(32, 32, 32); border-bottom-color: rgb(48, 48, 48); padding-bottom: 2px; padding-top: 2px; margin-top: 2px; margin-left: 4px; margin-right: 4px;">
-            <ui:Label text="Key" display-tooltip-when-elided="true" style="width: 166px; min-width: 166px; max-width: 166px; -unity-text-align: middle-left; -unity-font-style: bold; color: rgb(196, 196, 196); padding-left: 4px; margin-left: 0; margin-right: 0;" />
-            <ui:Label text="Value" display-tooltip-when-elided="true" style="flex-grow: 1; -unity-text-align: middle-center; -unity-font-style: bold; color: rgb(196, 196, 196); margin-left: 4px; margin-right: 4px;" />
-            <ui:Label text="Delete" display-tooltip-when-elided="true" style="width: 70px; min-width: 70px; max-width: 70px; -unity-text-align: middle-center; -unity-font-style: bold; color: rgb(196, 196, 196); margin-left: 0; margin-right: 0;" />
+            <ui:Label text="Key" display-tooltip-when-elided="true" style="width: 120px; min-width: 120px; max-width: 120px; -unity-text-align: middle-left; -unity-font-style: bold; color: rgb(196, 196, 196); margin-left: 0; margin-right: 0;" />
+            <ui:VisualElement style="width: 46px; min-width: 46px; max-width: 46px;" />
+            <ui:Label text="Value" display-tooltip-when-elided="true" style="flex-grow: 1; -unity-text-align: middle-left; -unity-font-style: bold; color: rgb(196, 196, 196); margin-left: 4px; margin-right: 4px;" />
+            <ui:Label text="Delete" display-tooltip-when-elided="true" tooltip="Mark items for deletion, then Save" style="width: 72px; min-width: 72px; max-width: 72px; -unity-text-align: middle-right; padding-right: 6px; -unity-font-style: bold; color: rgb(196, 196, 196); margin-left: 0; margin-right: 0;" />
         </ui:VisualElement>
-        <ui:ListView focusable="true" name="PmPrefsList" virtualization-method="DynamicHeight" fixed-item-height="22" style="flex-direction: column; bottom: auto; transform-origin: center; justify-content: flex-start;" />
+        <ui:ListView focusable="true" name="PmPrefsList" virtualization-method="DynamicHeight" style="flex-direction: column; bottom: auto; transform-origin: center; justify-content: flex-start;" />
         <ui:ListView focusable="true" name="PlayerPrefsList" virtualization-method="DynamicHeight" style="display: none;" />
     </ui:VisualElement>
     <ui:VisualElement name="Footer" style="position: relative; top: auto; bottom: auto; width: 100%; height: 24px; justify-content: flex-end; align-items: stretch; flex-direction: column; margin-top: auto; flex-shrink: 0; flex-grow: 0;">
