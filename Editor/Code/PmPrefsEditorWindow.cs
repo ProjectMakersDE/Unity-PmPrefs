@@ -50,6 +50,10 @@ namespace PM.Plugins
       private static readonly Color SelectedBg = new Color(.15f, .15f, .15f);
       private static readonly Color UnselectedBg = new Color(.235f, .235f, .235f);
 
+      // Placeholder shown in the Secure Key field to indicate a key is set, without revealing it.
+      // Mirrors the initial value defined in PmPrefs.uxml.
+      private const string SecureKeyMask = "**********";
+
       private VisualElement _root;
 
       private VisualTreeAsset _visualTreePmPrefsListItem;
@@ -727,6 +731,12 @@ namespace PM.Plugins
          _showPlayerPrefsButton.style.backgroundColor = new StyleColor(SelectedBg);
          _listViewPlayerPrefsList.style.display = DisplayStyle.Flex;
          _showPmPrefsButton.style.backgroundColor = new StyleColor(UnselectedBg);
+
+         // A ListView coming back from display:none can keep stale/empty content until the next
+         // input event (which makes the toggle feel like it needs a second click). Force it to
+         // repopulate and repaint the window now so the switch takes effect on the first click.
+         _listViewPlayerPrefsList.RefreshItems();
+         Repaint();
       }
 
       private void OnDefaultJsonButtonClicked()
@@ -752,6 +762,12 @@ namespace PM.Plugins
          _showPmPrefsButton.style.backgroundColor = new StyleColor(SelectedBg);
          _listViewPlayerPrefsList.style.display = DisplayStyle.None;
          _showPlayerPrefsButton.style.backgroundColor = new StyleColor(UnselectedBg);
+
+         // A ListView coming back from display:none can keep stale/empty content until the next
+         // input event (which makes the toggle feel like it needs a second click). Force it to
+         // repopulate and repaint the window now so the switch takes effect on the first click.
+         _listViewPmPrefsList.RefreshItems();
+         Repaint();
       }
 
       private void CreateNewPref()
@@ -1063,7 +1079,9 @@ namespace PM.Plugins
          PlayerPrefs.Save();
          PmPrefs.RefreshKeyCache();
 
-         _changeSecureKeyField.value = "";
+         // Restore the masked placeholder (instead of clearing) so the field keeps signalling that
+         // a secure key is configured, matching the field's initial state.
+         _changeSecureKeyField.value = SecureKeyMask;
          _prefsKeyReader.InvalidateCache();
          RefreshLists();
 

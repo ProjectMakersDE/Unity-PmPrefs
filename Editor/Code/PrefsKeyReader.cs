@@ -145,6 +145,14 @@ namespace PM.Plugins
          _cachedKeys = GetKeysFromTrackedList();
 #endif
 
+         // The platform stores are written by an OS daemon (notably macOS cfprefsd, which flushes
+         // the plist file asynchronously) and can lag behind Unity's in-memory PlayerPrefs right
+         // after a write. Reading the file/registry directly can therefore miss a key that was
+         // created moments ago. Overlay the PmPrefs tracked key list (kept in memory and always
+         // current) so freshly created/edited PmPrefs keys appear immediately instead of only
+         // after the OS flushes to disk.
+         MergeTrackedPmPrefsKeys(_cachedKeys);
+
          // Create sorted cache to avoid repeated OrderBy operations
          _cachedSortedKeys = _cachedKeys.OrderBy(k => k.Key).ToList();
 
@@ -431,6 +439,27 @@ namespace PM.Plugins
          {
             Debug.LogWarning($"[PmPrefs] Failed to parse Linux prefs: {ex.Message}");
             return null;
+         }
+      }
+
+      /// <summary>
+      /// Overlays the PmPrefs tracked key list (maintained in memory, always current) onto the
+      /// platform-read key set. The platform store is written asynchronously by the OS, so a key
+      /// created moments earlier may not yet be in the on-disk file/registry; the tracked list
+      /// always reflects it. Only adds keys that PlayerPrefs still reports as present, so keys
+      /// already deleted in this session are not resurrected.
+      /// </summary>
+      private static void MergeTrackedPmPrefsKeys(Dictionary<string, object> keys)
+      {
+         if (keys == null) return;
+
+         foreach (var key in PmPrefs.GetAllKeys())
+         {
+            string fullKey = PmPrefs.Prefix + key;
+            if (!keys.ContainsKey(fullKey) && PlayerPrefs.HasKey(fullKey))
+            {
+               keys[fullKey] = PlayerPrefs.GetString(fullKey);
+            }
          }
       }
 
