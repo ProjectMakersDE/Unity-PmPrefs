@@ -65,4 +65,3 @@ logs/security/
 *claude*.tmp
 
 # Note: CLAUDE.md is intentionally tracked in git
-CLAUDE.md
