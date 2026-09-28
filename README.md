@@ -44,6 +44,9 @@ Access the editor window via **Tools > ProjectMakers > PmPrefs**:
 3. Enter: `https://github.com/ProjectMakersDE/Unity-PmPrefs.git`
 4. Click **Add**
 
+To pin a specific release instead of the latest commit, add the tag to the URL:
+`https://github.com/ProjectMakersDE/Unity-PmPrefs.git#v2.5.0`
+
 ### Manual Installation
 1. Download or clone this repository
 2. Copy the folder into your project's `Packages` directory
