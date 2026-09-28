@@ -705,8 +705,8 @@ PmPrefs uses Unity's PlayerPrefs as its underlying storage mechanism, which stor
 
 **Security Limitations:**
 
-1. **Encryption key is in source code:**
-   - The AES encryption key is stored in `PmPrefs.cs`
+1. **Encryption key ships with your game:**
+   - The AES key comes from the `PmPrefsKeyAsset` in a `Resources` folder, or from the built-in fallback key if none is configured
    - Anyone with access to your compiled game can potentially extract this key through decompilation or reverse engineering
    - This is true even if you obfuscate your code
 
