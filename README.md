@@ -725,9 +725,9 @@ PmPrefs uses Unity's PlayerPrefs as its underlying storage mechanism, which stor
    - Never store passwords locally
    - Use token-based authentication with expiration
    - Store tokens in platform-specific secure storage:
-     - iOS: Keychain
-     - Android: Android Keystore
-     - Use plugins like [Unity Keychain Plugin](https://github.com/example/keychain)
+     - iOS: [Keychain Services](https://developer.apple.com/documentation/security/keychain-services)
+     - Android: [Android Keystore](https://developer.android.com/privacy-and-security/keystore)
+     - Access them from Unity through a native plugin that wraps these APIs
 
 2. **For payment information:**
    - Never store payment details locally
