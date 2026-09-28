@@ -21,7 +21,7 @@ MySettings settings = PmPrefs.Load<MySettings>("settings");
 ```
 
 ### Secure Storage
-All data is automatically encrypted using AES-256 encryption. Your saved data cannot be easily read or manipulated by users.
+All data is automatically encrypted using AES-256 encryption. This stops casual reading and editing of saved values, but the built-in fallback key and salt are public in this repository, so set your own key and read the [Security Note](#security-note) before relying on it.
 
 ### Visual Editor
 Access the editor window via **Tools > ProjectMakers > PmPrefs**:
